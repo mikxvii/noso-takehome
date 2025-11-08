@@ -1,0 +1,5 @@
+1:"$Sreact.fragment"
+2:I[97367,["/_next/static/chunks/42879de7b8087bc9.js"],"OutletBoundary"]
+3:"$Sreact.suspense"
+0:{"buildId":"rEnw1fWmq0F3B4AqJxiA6","rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex min-h-screen items-center justify-center bg-black","children":["$","main",null,{"className":"flex flex-col items-center justify-center gap-8 px-6 text-center","children":[["$","div",null,{"className":"relative","children":[["$","div",null,{"className":"absolute -inset-4 rounded-full bg-emerald-500/20 blur-2xl"}],["$","h1",null,{"className":"relative text-6xl font-bold tracking-tight text-white sm:text-7xl md:text-8xl","children":"Coming Soon"}]]}],["$","p",null,{"className":"max-w-md text-lg text-zinc-400 sm:text-xl","children":"Something exciting is in the works. Stay tuned."}],["$","div",null,{"className":"mt-4 h-1 w-24 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"}]]}]}],null,["$","$L2",null,{"children":["$","$3",null,{"name":"Next.MetadataOutlet","children":"$@4"}]}]]}],"loading":null,"isPartial":false}
+4:null
