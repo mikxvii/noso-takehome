@@ -5,15 +5,18 @@
  *
  * Middle panel displaying the transcript with speaker diarization.
  * Includes search and speaker filtering capabilities.
+ * Enhanced with detailed loading states.
  */
 
-import React, { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Search, Loader2, FileText, Mic } from 'lucide-react';
 import { TranscriptSegment, SpeakerLabel } from '@/types/models';
 
 interface TranscriptPaneProps {
   segments: TranscriptSegment[];
   isLoading?: boolean;
+  highlightTimestamp?: number | null;
+  onSegmentClick?: (timestamp: number) => void;
 }
 
 const speakerColors: Record<SpeakerLabel, string> = {
@@ -28,9 +31,10 @@ const speakerLabels: Record<SpeakerLabel, string> = {
   unknown: 'Unknown',
 };
 
-export function TranscriptPane({ segments, isLoading }: TranscriptPaneProps) {
+export function TranscriptPane({ segments, isLoading, highlightTimestamp, onSegmentClick }: TranscriptPaneProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [speakerFilter, setSpeakerFilter] = useState<SpeakerLabel | 'all'>('all');
+  const segmentRefs = useRef<(HTMLElement | null)[]>([]);
 
   // Filter and search segments
   const filteredSegments = useMemo(() => {
@@ -51,6 +55,23 @@ export function TranscriptPane({ segments, isLoading }: TranscriptPaneProps) {
 
     return filtered;
   }, [segments, speakerFilter, searchQuery]);
+
+  // Scroll to and highlight segment when timestamp is clicked
+  useEffect(() => {
+    if (highlightTimestamp === null || highlightTimestamp === undefined) return;
+
+    // Find the segment that contains this timestamp
+    const targetIndex = segments.findIndex(
+      seg => seg.start <= highlightTimestamp && seg.end >= highlightTimestamp
+    );
+
+    if (targetIndex !== -1 && segmentRefs.current[targetIndex]) {
+      segmentRefs.current[targetIndex]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }, [highlightTimestamp, segments]);
 
   // Format timestamp as mm:ss
   const formatTimestamp = (seconds: number) => {
@@ -77,9 +98,13 @@ export function TranscriptPane({ segments, isLoading }: TranscriptPaneProps) {
 
   return (
     <div className="flex h-full flex-col bg-zinc-900">
-      {/* Header with Search and Filters */}
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-zinc-800 bg-zinc-900 px-6 py-4">
+        <h1 className="text-2xl font-bold text-white">Transcript</h1>
+      </div>
+
+      {/* Search and Filters */}
       <div className="border-b border-zinc-800 p-4 space-y-3">
-        <h2 className="text-lg font-semibold text-white">Transcript</h2>
 
         {/* Search Input */}
         <div className="relative">
@@ -131,36 +156,98 @@ export function TranscriptPane({ segments, isLoading }: TranscriptPaneProps) {
       {/* Transcript List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-sm text-zinc-500">Loading transcript...</div>
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <div className="relative">
+              <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+              <Mic className="h-6 w-6 text-blue-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+            </div>
+            <div className="text-center space-y-2">
+              <div className="text-base font-semibold text-white">Transcribing Audio</div>
+              <div className="text-sm text-zinc-400 max-w-sm">
+                Our AI is converting speech to text and identifying speakers. This usually takes 30-60 seconds.
+              </div>
+              <div className="flex items-center gap-2 justify-center mt-4">
+                <div className="flex gap-1">
+                  <div className="h-2 w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="h-2 w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="h-2 w-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            </div>
           </div>
         ) : filteredSegments.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-sm text-zinc-500">
+          <div className="flex flex-col items-center justify-center py-12 space-y-3">
+            <FileText className="h-12 w-12 text-zinc-600" />
+            <div className="text-sm text-zinc-500 text-center">
               {searchQuery || speakerFilter !== 'all'
                 ? 'No matching segments found'
                 : 'No transcript available'}
             </div>
+            {(searchQuery || speakerFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSpeakerFilter('all');
+                }}
+                className="text-xs text-emerald-400 hover:text-emerald-300"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
-          filteredSegments.map((segment, index) => (
-            <div
-              key={index}
-              className={`rounded-lg border-l-4 p-3 ${speakerColors[segment.speaker]}`}
-            >
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-xs font-medium text-emerald-400">
-                  {speakerLabels[segment.speaker]}
-                </span>
-                <span className="text-xs text-zinc-500">
-                  {formatTimestamp(segment.start)}
-                </span>
-              </div>
-              <p className="text-sm leading-relaxed text-zinc-200">
-                {highlightText(segment.text, searchQuery)}
-              </p>
+          <>
+            <div className="text-xs text-zinc-500 mb-2">
+              {filteredSegments.length} {filteredSegments.length === 1 ? 'segment' : 'segments'}
+              {searchQuery && ` matching "${searchQuery}"`}
             </div>
-          ))
+            {filteredSegments.map((segment, index) => {
+              // Find the original index in the full segments array
+              const originalIndex = segments.findIndex(
+                seg => seg.start === segment.start && seg.text === segment.text
+              );
+              const isHighlighted =
+                highlightTimestamp !== null &&
+                highlightTimestamp !== undefined &&
+                segment.start <= highlightTimestamp &&
+                segment.end >= highlightTimestamp;
+
+              return (
+                <button
+                  key={index}
+                  ref={(el) => {
+                    if (originalIndex !== -1) {
+                      segmentRefs.current[originalIndex] = el;
+                    }
+                  }}
+                  onClick={() => {
+                    if (onSegmentClick) {
+                      onSegmentClick(segment.start);
+                    }
+                  }}
+                  className={`w-full text-left rounded-lg border-l-4 p-3 transition-all cursor-pointer ${
+                    speakerColors[segment.speaker]
+                  } ${
+                    isHighlighted
+                      ? 'ring-2 ring-emerald-500 bg-emerald-500/20 scale-[1.02]'
+                      : 'hover:bg-zinc-800/50'
+                  }`}
+                >
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-xs font-medium text-emerald-400">
+                      {speakerLabels[segment.speaker]}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      {formatTimestamp(segment.start)}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-zinc-200">
+                    {highlightText(segment.text, searchQuery)}
+                  </p>
+                </button>
+              );
+            })}
+          </>
         )}
       </div>
     </div>

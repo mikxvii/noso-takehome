@@ -1,16 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload } from 'lucide-react';
 import { UploadPane } from '@/components/UploadPane';
 import { CallHistory } from '@/components/CallHistory';
 import { TranscriptPane } from '@/components/TranscriptPane';
 import { AnalysisPane } from '@/components/AnalysisPane';
+import { AudioPlayer } from '@/components/AudioPlayer';
 import { useCall } from '@/hooks/useCall';
+import { storage } from '@/lib/firebase/config';
+import { ref, getDownloadURL } from 'firebase/storage';
 
 export default function Home() {
   const [currentCallId, setCurrentCallId] = useState<string | undefined>();
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedTimestamp, setSelectedTimestamp] = useState<number | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioSeekTime, setAudioSeekTime] = useState<number | null>(null);
   const { call, uploadFile, progress } = useCall(currentCallId);
 
   const handleFileSelected = async (file: File) => {
@@ -37,55 +43,106 @@ export default function Home() {
     setShowHistory(!showHistory);
   };
 
+  const handleTimestampClick = (timestamp: number) => {
+    setSelectedTimestamp(timestamp);
+    setAudioSeekTime(timestamp);
+  };
+
+  const handleAudioTimeUpdate = (currentTime: number) => {
+    setSelectedTimestamp(currentTime);
+  };
+
+  // Fetch audio URL when call changes
+  useEffect(() => {
+    const fetchAudioUrl = async () => {
+      if (!call?.audioPath) {
+        setAudioUrl(null);
+        return;
+      }
+
+      try {
+        // Check if audioPath is already an HTTPS URL
+        if (call.audioPath.startsWith('https://')) {
+          setAudioUrl(call.audioPath);
+        } else {
+          // It's a storage path, get download URL
+          const storageRef = ref(storage, call.audioPath);
+          const url = await getDownloadURL(storageRef);
+          setAudioUrl(url);
+        }
+      } catch (error) {
+        console.error('Error fetching audio URL:', error);
+        setAudioUrl(null);
+      }
+    };
+
+    fetchAudioUrl();
+  }, [call?.audioPath]);
+
   return (
-    <div className="flex h-screen bg-black">
-      <div className="w-1/4 border-r border-zinc-800/50">
-        {showHistory ? (
-          <div className="h-full flex flex-col bg-zinc-900">
-            <div className="p-6 border-b border-zinc-800/50">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Call History</h2>
-                <button
-                  onClick={handleHistoryToggle}
-                  className="rounded-lg p-2 bg-emerald-500/10 text-emerald-500 transition-colors"
-                  title="Back to Upload"
-                >
-                  <Upload className="h-5 w-5" />
-                </button>
+    <div className="flex h-screen flex-col bg-black">
+      {/* Main content area */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className="w-1/5 border-r border-zinc-800/50">
+          {showHistory ? (
+            <div className="h-full flex flex-col bg-zinc-900">
+              <div className="flex-shrink-0 border-b border-zinc-800 bg-zinc-900 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-2xl font-bold text-white">Call History</h1>
+                  <button
+                    onClick={handleHistoryToggle}
+                    className="rounded-lg p-2 bg-emerald-500/10 text-emerald-500 transition-colors hover:bg-emerald-500/20"
+                    title="Back to Upload"
+                  >
+                    <Upload className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <CallHistory
+                  userId="anonymous-user"
+                  onCallSelected={handleCallSelected}
+                  currentCallId={currentCallId}
+                  onCallDeleted={handleCallDeleted}
+                />
               </div>
             </div>
-            <CallHistory
-              userId="anonymous-user"
-              onCallSelected={handleCallSelected}
-              currentCallId={currentCallId}
-              onCallDeleted={handleCallDeleted}
+          ) : (
+            <UploadPane
+              onFileSelected={handleFileSelected}
+              status={call?.status || 'created'}
+              progress={progress}
+              durationSec={call?.durationSec}
+              onHistoryToggle={handleHistoryToggle}
+              showingHistory={false}
             />
-          </div>
-        ) : (
-          <UploadPane
-            onFileSelected={handleFileSelected}
-            status={call?.status || 'created'}
-            progress={progress}
-            durationSec={call?.durationSec}
-            onHistoryToggle={handleHistoryToggle}
-            showingHistory={false}
+          )}
+        </div>
+
+        <div className="w-2/5 border-r border-zinc-800/50">
+          <TranscriptPane
+            segments={call?.transcript?.segments || []}
+            isLoading={call?.status === 'transcribing'}
+            highlightTimestamp={selectedTimestamp}
+            onSegmentClick={handleTimestampClick}
           />
-        )}
+        </div>
+
+        <div className="w-2/5">
+          <AnalysisPane
+            analysis={call?.analysis || null}
+            isLoading={call?.status === 'analyzing'}
+            onTimestampClick={handleTimestampClick}
+          />
+        </div>
       </div>
 
-      <div className="w-1/2 border-r border-zinc-800/50">
-        <TranscriptPane
-          segments={call?.transcript?.segments || []}
-          isLoading={call?.status === 'transcribing'}
-        />
-      </div>
-
-      <div className="w-1/4">
-        <AnalysisPane
-          analysis={call?.analysis || null}
-          isLoading={call?.status === 'analyzing'}
-        />
-      </div>
+      {/* Audio Player at bottom */}
+      <AudioPlayer
+        audioUrl={audioUrl}
+        onTimeUpdate={handleAudioTimeUpdate}
+        seekToTime={audioSeekTime}
+      />
     </div>
   );
 }

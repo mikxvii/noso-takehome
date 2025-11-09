@@ -164,7 +164,7 @@ JSON STRUCTURE (REQUIRED):
     "empathy": <number 0-100>,
     "professionalism": <number 0-100>
   },
-  "callTypePrediction": "<repair|maintenance|installation|other>",
+  "callTypePrediction": "<descriptive label like 'HVAC Repair - No Cooling', 'Plumbing Installation - New Fixtures', 'Electrical Maintenance - Annual Service', etc. Be specific and include the service category and reason>",
   "stages": {
     "introduction": {
       "present": <boolean>,
@@ -249,23 +249,30 @@ STAGE DEFINITIONS & QUALITY CRITERIA:
    - Quality "poor": Abrupt ending, no thank you or verification
    - Evidence: Provide quotes from the closing sequence
 
-CHECKLIST REQUIREMENTS (provide evidence for each):
-1. tech-introduced-self: Tech stated their name clearly
-2. tech-stated-company: Tech mentioned company name
-3. confirmed-customer-info: Tech confirmed customer name or address
-4. asked-diagnostic-questions: Tech asked about the problem/symptoms
-5. explained-problem-clearly: Tech explained what was wrong in understandable terms
-6. explained-solution: Tech described what they did or will do
-7. provided-next-steps: Tech explained what happens next
-8. asked-for-questions: Tech asked if customer had questions
-9. professional-tone: Tech maintained polite, professional demeanor
-10. clear-communication: Tech spoke clearly, avoided unexplained jargon
+CHECKLIST REQUIREMENTS (provide evidence for each - use intuitive, readable labels starting with verbs):
+1. tech-introduced-self: "Introduced themselves by name"
+2. tech-stated-company: "Mentioned the company name"
+3. confirmed-customer-info: "Confirmed customer name or address"
+4. asked-diagnostic-questions: "Asked questions to understand the problem"
+5. explained-problem-clearly: "Explained the issue in clear, understandable terms"
+6. explained-solution: "Clearly described the solution or work performed"
+7. provided-next-steps: "Explained what happens next or follow-up actions"
+8. asked-for-questions: "Asked if the customer had any questions"
+9. professional-tone: "Maintained a professional and courteous tone throughout"
+10. clear-communication: "Communicated clearly without unexplained technical jargon"
 
-SALES INSIGHTS GUIDELINES:
-- Identify moments where tech successfully positioned value
-- Note customer buying signals or expressed needs
-- Highlight effective sales techniques used
-- Mark severity based on impact: "high" = significant revenue opportunity, "med" = moderate, "low" = minor
+SALES INSIGHTS GUIDELINES (BE COMPREHENSIVE):
+- Identify ALL moments where tech successfully positioned value or could have positioned value
+- Note EVERY customer buying signal, expressed need, concern, or interest
+- Highlight effective sales techniques used (listening, questioning, value proposition, objection handling)
+- Identify customer pain points that could lead to additional services
+- Note customer questions about pricing, scheduling, or additional services
+- Mark moments where customer showed interest but tech didn't follow up
+- Include insights about customer satisfaction levels and potential for referrals
+- Identify opportunities for maintenance plans, warranties, or recurring services
+- Note any competitive mentions or comparisons
+- Mark severity based on impact: "high" = significant revenue opportunity or missed revenue, "med" = moderate opportunity, "low" = minor opportunity
+- Provide at least 5-10 sales insights per call if possible - be thorough and comprehensive
 
 MISSED OPPORTUNITIES GUIDELINES:
 - Look for customer pain points that weren't addressed
@@ -305,12 +312,19 @@ ${segmentsText}
 ANALYSIS REQUIREMENTS:
 1. Read the ENTIRE transcript carefully before analyzing
 2. For each stage, provide AT LEAST 2-3 pieces of evidence with exact quotes and timestamps
-3. For sales insights, identify ALL moments where value was discussed or could have been added
+3. For sales insights, be COMPREHENSIVE - identify ALL moments where:
+   - Value was positioned or could have been positioned
+   - Customer showed buying signals, needs, concerns, or interests
+   - Tech used effective sales techniques
+   - Customer asked about pricing, scheduling, or additional services
+   - Opportunities existed for upsells, maintenance plans, or recurring services
+   Aim for 5-10+ sales insights per call - be thorough!
 4. For missed opportunities, be specific about what should have been said and when
 5. For the checklist, verify each item against the transcript and provide supporting evidence
-6. Ensure all timestamps are accurate and correspond to actual moments in the transcript
-7. Make your notes detailed and actionable - avoid vague statements like "could be better"
-8. When quoting, use the exact words from the transcript, not paraphrases
+6. For call type, provide a descriptive label that includes the service category and specific reason (e.g., "HVAC Repair - No Cooling" not just "repair")
+7. Ensure all timestamps are accurate and correspond to actual moments in the transcript
+8. Make your notes detailed and actionable - avoid vague statements like "could be better"
+9. When quoting, use the exact words from the transcript, not paraphrases
 
 Provide your comprehensive analysis in valid JSON format following the schema exactly.`;
   }
