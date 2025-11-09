@@ -50,9 +50,15 @@ console.log(`Attempting to configure CORS for bucket: ${bucketName}`);
 const bucket = admin.storage().bucket(bucketName);
 
 // CORS configuration
+// Add your production domain here
 const corsConfig = [
   {
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'https://noso-takehome.vercel.app',
+      'https://*.vercel.app', // Allow all Vercel preview deployments
+    ],
     method: ['PUT', 'GET', 'POST', 'HEAD', 'OPTIONS'],
     responseHeader: ['Content-Type', 'x-goog-resumable', 'Authorization'],
     maxAgeSeconds: 3600,
@@ -113,8 +119,9 @@ async function setupCors() {
     console.log('\n✅ CORS configuration set successfully!');
     console.log('CORS config:', JSON.stringify(corsConfig, null, 2));
     console.log(`\nBucket: ${bucketName}`);
-    console.log('Allowed origins: http://localhost:3000, http://localhost:3001');
+    console.log('Allowed origins:', corsConfig[0].origin.join(', '));
     console.log('Allowed methods: PUT, GET, POST, HEAD, OPTIONS');
+    console.log('\n💡 If you have a custom domain, add it to the origin array in setup-cors.ts');
   } catch (error: any) {
     console.error('\n❌ Error setting CORS:', error.message);
     if (error.code === 403) {

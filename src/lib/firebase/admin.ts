@@ -71,6 +71,29 @@ function initializeFirebaseAdmin() {
         // Trim leading/trailing whitespace
         privateKey = privateKey.trim();
         
+        // Step 3.5: Extract and clean the base64 content
+        // The PEM format should be:
+        // -----BEGIN PRIVATE KEY-----
+        // <base64 content>
+        // -----END PRIVATE KEY-----
+        const beginMatch = privateKey.match(/-----BEGIN PRIVATE KEY-----\s*\n?/);
+        const endMatch = privateKey.match(/\n?\s*-----END PRIVATE KEY-----/);
+        
+        if (beginMatch && endMatch) {
+          // Extract just the base64 content between markers
+          const beginEnd = beginMatch[0].length;
+          const endStart = endMatch.index!;
+          const base64Content = privateKey.substring(beginEnd, endStart);
+          
+          // Clean the base64 content: remove all whitespace, keep only valid base64 chars
+          const cleanedBase64 = base64Content
+            .replace(/[^A-Za-z0-9+/=]/g, '') // Remove all non-base64 characters
+            .replace(/\s+/g, ''); // Remove any remaining whitespace
+          
+          // Reconstruct the private key with cleaned base64
+          privateKey = beginMatch[0] + cleanedBase64 + '\n' + endMatch[0];
+        }
+        
         // Step 4: Fix broken END marker (common issue: "-----END\n PRIVATE KEY-----")
         // Fix cases where END marker is split across lines
         privateKey = privateKey.replace(/-----END\s*\n\s*PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');

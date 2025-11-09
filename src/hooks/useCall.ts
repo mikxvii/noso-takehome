@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { db, ensureInitialized } from '@/lib/firebase/config';
+import { ensureInitialized, getDbAfterInit } from '@/lib/firebase/config';
 import { Call } from '@/types/models';
 
 interface UseCallReturn {
@@ -31,17 +31,22 @@ export function useCall(callId?: string): UseCallReturn {
     let unsubscribe: (() => void) | null = null;
 
     const setupSubscription = async () => {
-      await ensureInitialized();
-      if (!db) {
-        console.error('Firestore is not initialized');
-        return;
-      }
+      try {
+        // Get the db instance after ensuring initialization
+        const firestoreDb = await getDbAfterInit();
+        
+        if (!firestoreDb) {
+          console.error('[useCall] Firestore is not initialized after ensureInitialized()');
+          console.error('[useCall] This might be a Firebase configuration issue. Check your NEXT_PUBLIC_FIREBASE_* environment variables.');
+          setError('Firestore is not initialized. Please check your Firebase configuration.');
+          return;
+        }
 
-      // Dynamic import to avoid build-time execution
-      const { doc, onSnapshot } = await import('firebase/firestore');
-      
-      unsubscribe = onSnapshot(
-        doc(db, 'calls', callId),
+        // Dynamic import to avoid build-time execution
+        const { doc, onSnapshot } = await import('firebase/firestore');
+        
+        unsubscribe = onSnapshot(
+          doc(firestoreDb, 'calls', callId),
         (snapshot) => {
           if (snapshot.exists()) {
             const data = snapshot.data();
@@ -66,6 +71,10 @@ export function useCall(callId?: string): UseCallReturn {
           setError(err.message);
         }
       );
+      } catch (initError) {
+        console.error('[useCall] Failed to initialize Firebase:', initError);
+        setError(initError instanceof Error ? initError.message : 'Failed to initialize Firebase');
+      }
     };
 
     setupSubscription();

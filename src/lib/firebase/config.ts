@@ -82,7 +82,7 @@ let _initPromise: Promise<void> | null = null;
 
 async function ensureInitialized(): Promise<void> {
   if (typeof window === 'undefined') return;
-  if (_app) return;
+  if (_app && _db && _storage) return; // Already fully initialized
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
@@ -97,9 +97,20 @@ async function ensureInitialized(): Promise<void> {
         _auth = getAuth(_app);
         _db = getFirestore(_app);
         _storage = getStorage(_app);
+        
+        console.log('[Firebase Config] Initialization complete:', {
+          hasApp: !!_app,
+          hasAuth: !!_auth,
+          hasDb: !!_db,
+          hasStorage: !!_storage,
+        });
+      } else {
+        console.error('[Firebase Config] Failed to get Firebase app instance');
+        throw new Error('Firebase app initialization failed');
       }
     } catch (error) {
-      console.error('Failed to initialize Firebase services:', error);
+      console.error('[Firebase Config] Failed to initialize Firebase services:', error);
+      throw error; // Re-throw so callers know initialization failed
     }
   })();
 
@@ -127,9 +138,7 @@ function getAuthSync(): Auth | null {
 
 function getDbSync(): Firestore | null {
   if (typeof window === 'undefined') return null;
-  if (!_db && typeof window !== 'undefined') {
-    ensureInitialized().catch(console.error);
-  }
+  // Return the cached instance if available
   return _db;
 }
 
@@ -156,3 +165,9 @@ export const storage = createLazyGetter(getStorageSync) as FirebaseStorage | nul
 
 // Also export async initialization function for components that need to wait
 export { ensureInitialized };
+
+// Export a function to get the db instance after initialization
+export async function getDbAfterInit(): Promise<Firestore | null> {
+  await ensureInitialized();
+  return _db;
+}

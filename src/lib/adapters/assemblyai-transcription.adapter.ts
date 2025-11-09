@@ -30,20 +30,33 @@ export class AssemblyAITranscriptionAdapter implements TranscriptionPort {
     try {
       // Submit transcription with speaker diarization
       // Using submit() for async processing with webhooks
-      const params = {
+      const webhookSecret = process.env.TRANSCRIPTION_WEBHOOK_SECRET;
+      
+      const params: any = {
         audio: input.audioUrl,
         speaker_labels: input.enableDiarization ?? true,
         speech_model: 'universal' as const,
         language_code: input.languageCode,
-        webhook_url: input.webhookUrl,
-        webhook_auth_header_name: 'x-webhook-signature',
-        webhook_auth_header_value: process.env.TRANSCRIPTION_WEBHOOK_SECRET || '',
       };
+
+      // Only include webhook URL if provided
+      if (input.webhookUrl) {
+        params.webhook_url = input.webhookUrl;
+        
+        // Only include webhook auth if secret is set (AssemblyAI requires non-empty value)
+        if (webhookSecret) {
+          params.webhook_auth_header_name = 'x-webhook-signature';
+          params.webhook_auth_header_value = webhookSecret;
+        } else {
+          console.warn('[AssemblyAI] Webhook URL provided but TRANSCRIPTION_WEBHOOK_SECRET not set. Webhook will be unauthenticated.');
+        }
+      }
 
       console.log('[AssemblyAI] Submitting transcription with params:', {
         audio: input.audioUrl,
         speaker_labels: params.speaker_labels,
         webhook_url: input.webhookUrl,
+        has_webhook_auth: !!webhookSecret,
       });
 
       const transcript = await this.client.transcripts.submit(params);
