@@ -21,9 +21,43 @@ import { Call } from '@/types/models';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Firebase Admin is initialized
+    let db;
+    try {
+      db = adminDb();
+      console.log('[POST /api/calls] Firebase Admin initialized successfully');
+    } catch (adminError) {
+      const errorMessage = adminError instanceof Error ? adminError.message : String(adminError);
+      console.error('[POST /api/calls] Firebase Admin not initialized:', errorMessage);
+      console.error('[POST /api/calls] FIREBASE_SERVICE_ACCOUNT_KEY exists:', !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      return NextResponse.json(
+        { 
+          error: 'Server configuration error',
+          details: 'FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set or invalid. Please configure Firebase Admin SDK in your deployment environment.',
+          hint: 'Set FIREBASE_SERVICE_ACCOUNT_KEY in your production environment variables.',
+          debug: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        },
+        { status: 500 }
+      );
+    }
+
     // Parse and validate request body
-    const body = await request.json();
-    const validatedData = createCallRequestSchema.parse(body);
+    let body;
+    let validatedData;
+    try {
+      body = await request.json();
+      validatedData = createCallRequestSchema.parse(body);
+      console.log('[POST /api/calls] Request validated:', { fileName: validatedData.fileName, contentType: validatedData.contentType });
+    } catch (parseError) {
+      console.error('[POST /api/calls] Request validation failed:', parseError);
+      if (parseError instanceof Error && parseError.name === 'ZodError') {
+        return NextResponse.json(
+          { error: 'Invalid request body', details: parseError.message },
+          { status: 400 }
+        );
+      }
+      throw parseError;
+    }
 
     // For MVP, use a mock user ID (in production, get from Firebase Auth token)
     const userId = request.headers.get('x-user-id') || 'anonymous-user';
@@ -45,27 +79,40 @@ export async function POST(request: NextRequest) {
       : new MockTranscriptionAdapter();
 
     // Generate signed upload URL
-    const uploadResult = await storageAdapter.getUploadUrl({
-      fileName: validatedData.fileName,
-      contentType: validatedData.contentType,
-      userId,
-      callId,
-    });
-
-    console.log('Generated upload URL:', uploadResult.uploadUrl?.substring(0, 100) + '...');
+    let uploadResult;
+    try {
+      console.log('[POST /api/calls] Generating upload URL...');
+      uploadResult = await storageAdapter.getUploadUrl({
+        fileName: validatedData.fileName,
+        contentType: validatedData.contentType,
+        userId,
+        callId,
+      });
+      console.log('[POST /api/calls] Upload URL generated:', uploadResult.uploadUrl?.substring(0, 100) + '...');
+    } catch (uploadError) {
+      console.error('[POST /api/calls] Failed to generate upload URL:', uploadError);
+      throw new Error(`Failed to generate upload URL: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
+    }
 
     // Create Call document in Firestore
-    const now = Date.now();
-    const callData: Call = {
-      id: callId,
-      userId,
-      audioPath: uploadResult.storagePath,
-      status: 'created',
-      createdAt: now,
-      updatedAt: now,
-    };
+    try {
+      const now = Date.now();
+      const callData: Call = {
+        id: callId,
+        userId,
+        audioPath: uploadResult.storagePath,
+        status: 'created',
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    await adminDb().collection('calls').doc(callId).set(callData);
+      console.log('[POST /api/calls] Creating Firestore document...');
+      await db.collection('calls').doc(callId).set(callData);
+      console.log('[POST /api/calls] Firestore document created successfully');
+    } catch (firestoreError) {
+      console.error('[POST /api/calls] Failed to create Firestore document:', firestoreError);
+      throw new Error(`Failed to create call in database: ${firestoreError instanceof Error ? firestoreError.message : 'Unknown error'}`);
+    }
 
     // Don't start transcription here - wait for file upload to complete
     // The client will call /api/calls/[callId]/start-transcription after upload
@@ -78,17 +125,24 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Error creating call:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    console.error('[POST /api/calls] Error creating call:', {
+      message: errorMessage,
+      stack: errorStack,
+      name: error instanceof Error ? error.name : undefined,
+    });
 
-    if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json(
-        { error: 'Invalid request body', details: error.message },
-        { status: 400 }
-      );
-    }
+    // Don't expose stack traces in production
+    const isDevelopment = process.env.NODE_ENV === 'development';
 
     return NextResponse.json(
-      { error: 'Failed to create call', details: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        error: 'Failed to create call',
+        details: errorMessage,
+        ...(isDevelopment && errorStack ? { stack: errorStack } : {})
+      },
       { status: 500 }
     );
   }
