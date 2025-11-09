@@ -33,7 +33,19 @@ export function useCall(callId?: string): UseCallReturn {
       doc(db, 'calls', callId),
       (snapshot) => {
         if (snapshot.exists()) {
-          setCall({ id: snapshot.id, ...snapshot.data() } as Call);
+          const data = snapshot.data();
+          const callData = { id: snapshot.id, ...data } as Call;
+          
+          // Debug logging
+          if (callData.transcript) {
+            console.log('[useCall] Transcript updated:', {
+              hasSegments: !!callData.transcript.segments,
+              segmentCount: callData.transcript.segments?.length || 0,
+              status: callData.status,
+            });
+          }
+          
+          setCall(callData);
         } else {
           setError('Call not found');
         }
@@ -46,6 +58,42 @@ export function useCall(callId?: string): UseCallReturn {
 
     return () => unsubscribe();
   }, [callId]);
+
+  // Poll for transcription status when transcribing (for local dev when webhooks don't work)
+  useEffect(() => {
+    if (!callId || !call) return;
+    
+    // Only poll if transcribing and no transcript yet
+    if (call.status === 'transcribing' && !call.transcript && call.transcriptionJobId) {
+      console.log('[useCall] Starting polling for transcription status...');
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/calls/${callId}/poll-transcription`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.status === 'completed') {
+              clearInterval(pollInterval);
+              console.log('[useCall] Polling found completed transcript');
+            }
+          }
+        } catch (err) {
+          console.error('[useCall] Polling error:', err);
+        }
+      }, 5000); // Poll every 5 seconds
+
+      // Clean up polling after 5 minutes
+      const timeout = setTimeout(() => {
+        clearInterval(pollInterval);
+        console.log('[useCall] Polling timeout reached');
+      }, 5 * 60 * 1000);
+
+      return () => {
+        clearInterval(pollInterval);
+        clearTimeout(timeout);
+      };
+    }
+  }, [callId, call?.status, call?.transcript, call?.transcriptionJobId]);
 
   const uploadFile = useCallback(async (file: File): Promise<string | undefined> => {
     try {
@@ -112,7 +160,18 @@ export function useCall(callId?: string): UseCallReturn {
 
       setProgress(30);
 
-      console.log(`File uploaded successfully. Call ID: ${newCallId}`);
+      // Step 3: Notify server that upload is complete and start transcription
+      const startTranscriptionResponse = await fetch(`/api/calls/${newCallId}/start-transcription`, {
+        method: 'POST',
+      });
+
+      if (!startTranscriptionResponse.ok) {
+        const errorData = await startTranscriptionResponse.json();
+        throw new Error(errorData.error || 'Failed to start transcription');
+      }
+
+      setProgress(50);
+      console.log(`File uploaded successfully and transcription started. Call ID: ${newCallId}`);
       return newCallId;
 
     } catch (err) {

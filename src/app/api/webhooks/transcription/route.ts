@@ -13,19 +13,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase/admin';
 import { MockTranscriptionAdapter } from '@/lib/adapters/mock-transcription.adapter';
-import { transcriptionWebhookSchema } from '@/lib/validators/schemas';
+import { AssemblyAITranscriptionAdapter } from '@/lib/adapters/assemblyai-transcription.adapter';
 
 // Track processed webhooks for idempotency
 const processedWebhooks = new Map<string, boolean>();
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔔 [Webhook] Received transcription webhook');
+    
     // Get signature from headers
     const signature = request.headers.get('x-webhook-signature') || '';
     const rawBody = await request.text();
 
+    console.log('🔔 [Webhook] Headers:', {
+      signature: signature ? 'present' : 'missing',
+      contentType: request.headers.get('content-type'),
+    });
+
+    // Use the appropriate adapter based on configuration
+    const useAssemblyAI = !!process.env.ASSEMBLYAI_API_KEY;
+    const transcriptionAdapter = useAssemblyAI
+      ? new AssemblyAITranscriptionAdapter()
+      : new MockTranscriptionAdapter();
+    
+    console.log('🔔 [Webhook] Using adapter:', useAssemblyAI ? 'AssemblyAI' : 'Mock');
+
     // Verify webhook signature
-    const transcriptionAdapter = new MockTranscriptionAdapter();
     const isValid = transcriptionAdapter.verifyWebhook(signature, rawBody);
 
     if (!isValid && process.env.NODE_ENV === 'production') {
@@ -36,9 +50,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse and validate payload
+    // Parse the raw payload using the adapter
     const payload = JSON.parse(rawBody);
-    const validatedPayload = transcriptionWebhookSchema.parse(payload);
+
+    // Parse webhook payload through the adapter
+    const validatedPayload = await transcriptionAdapter.parseWebhookPayload(payload);
 
     // Idempotency check
     if (processedWebhooks.has(validatedPayload.jobId)) {
@@ -66,6 +82,14 @@ export async function POST(request: NextRequest) {
 
     // Handle based on status
     if (validatedPayload.status === 'completed' && validatedPayload.transcript) {
+      // Log transcript structure for debugging
+      console.log(`[Webhook] Transcript received for call ${callId}:`, {
+        hasSegments: !!validatedPayload.transcript.segments,
+        segmentCount: validatedPayload.transcript.segments?.length || 0,
+        hasText: !!validatedPayload.transcript.text,
+        provider: validatedPayload.transcript.provider,
+      });
+
       // Update call with transcript
       await adminDb().collection('calls').doc(callId).update({
         transcript: validatedPayload.transcript,
@@ -73,7 +97,7 @@ export async function POST(request: NextRequest) {
         updatedAt: Date.now(),
       });
 
-      console.log(`Transcript saved for call ${callId}`);
+      console.log(`[Webhook] Transcript saved for call ${callId} with ${validatedPayload.transcript.segments?.length || 0} segments`);
 
       // Trigger analysis asynchronously
       // In production, use a queue or background job

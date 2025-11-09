@@ -59,7 +59,7 @@ export class MockTranscriptionAdapter implements TranscriptionPort {
     );
   }
 
-  parseWebhookPayload(rawPayload: unknown): TranscriptionWebhookPayload {
+  async parseWebhookPayload(rawPayload: unknown): Promise<TranscriptionWebhookPayload> {
     // Mock parsing - assumes payload is already in our format
     const payload = rawPayload as TranscriptionWebhookPayload;
 

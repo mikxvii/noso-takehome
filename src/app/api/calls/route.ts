@@ -15,6 +15,7 @@ import { adminDb } from '@/lib/firebase/admin';
 import { FirebaseStorageAdapter } from '@/lib/adapters/firebase-storage.adapter';
 import { MockStorageAdapter } from '@/lib/adapters/mock-storage.adapter';
 import { MockTranscriptionAdapter } from '@/lib/adapters/mock-transcription.adapter';
+import { AssemblyAITranscriptionAdapter } from '@/lib/adapters/assemblyai-transcription.adapter';
 import { createCallRequestSchema } from '@/lib/validators/schemas';
 import { Call } from '@/types/models';
 
@@ -33,10 +34,15 @@ export async function POST(request: NextRequest) {
     // Initialize adapters
     // Use FirebaseStorageAdapter if bucket is configured, otherwise fall back to mock
     const useFirebaseStorage = !!process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-    const storageAdapter = useFirebaseStorage 
+    const storageAdapter = useFirebaseStorage
       ? new FirebaseStorageAdapter()
       : new MockStorageAdapter();
-    const transcriptionAdapter = new MockTranscriptionAdapter();
+
+    // Use AssemblyAI if API key is configured, otherwise fall back to mock
+    const useAssemblyAI = !!process.env.ASSEMBLYAI_API_KEY;
+    const transcriptionAdapter = useAssemblyAI
+      ? new AssemblyAITranscriptionAdapter()
+      : new MockTranscriptionAdapter();
 
     // Generate signed upload URL
     const uploadResult = await storageAdapter.getUploadUrl({
@@ -61,24 +67,8 @@ export async function POST(request: NextRequest) {
 
     await adminDb().collection('calls').doc(callId).set(callData);
 
-    // Get the download URL for the transcription service
-    const downloadUrl = await storageAdapter.getDownloadUrl(uploadResult.storagePath);
-
-    // Start transcription job
-    // Webhook URL will be called when transcription completes
-    const webhookUrl = `${request.nextUrl.origin}/api/webhooks/transcription`;
-    const transcriptionResult = await transcriptionAdapter.startJob({
-      audioUrl: downloadUrl,
-      webhookUrl,
-      enableDiarization: true,
-    });
-
-    // Update call with transcription job ID and status
-    await adminDb().collection('calls').doc(callId).update({
-      transcriptionJobId: transcriptionResult.jobId,
-      status: 'transcribing',
-      updatedAt: Date.now(),
-    });
+    // Don't start transcription here - wait for file upload to complete
+    // The client will call /api/calls/[callId]/start-transcription after upload
 
     // Return response
     return NextResponse.json({

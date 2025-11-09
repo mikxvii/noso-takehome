@@ -73,7 +73,7 @@ export interface TranscriptionPort {
    * @param rawPayload - Raw webhook body from provider
    * @returns Normalized webhook payload
    */
-  parseWebhookPayload(rawPayload: unknown): TranscriptionWebhookPayload;
+  parseWebhookPayload(rawPayload: unknown): Promise<TranscriptionWebhookPayload>;
 
   /**
    * Optional: Get current status of a transcription job
