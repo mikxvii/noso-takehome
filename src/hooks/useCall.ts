@@ -7,8 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { db, ensureInitialized } from '@/lib/firebase/config';
 import { Call } from '@/types/models';
 
 interface UseCallReturn {
@@ -29,34 +28,53 @@ export function useCall(callId?: string): UseCallReturn {
   useEffect(() => {
     if (!callId) return;
 
-    const unsubscribe = onSnapshot(
-      doc(db, 'calls', callId),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          const callData = { id: snapshot.id, ...data } as Call;
-          
-          // Debug logging
-          if (callData.transcript) {
-            console.log('[useCall] Transcript updated:', {
-              hasSegments: !!callData.transcript.segments,
-              segmentCount: callData.transcript.segments?.length || 0,
-              status: callData.status,
-            });
-          }
-          
-          setCall(callData);
-        } else {
-          setError('Call not found');
-        }
-      },
-      (err) => {
-        console.error('Error listening to call:', err);
-        setError(err.message);
-      }
-    );
+    let unsubscribe: (() => void) | null = null;
 
-    return () => unsubscribe();
+    const setupSubscription = async () => {
+      await ensureInitialized();
+      if (!db) {
+        console.error('Firestore is not initialized');
+        return;
+      }
+
+      // Dynamic import to avoid build-time execution
+      const { doc, onSnapshot } = await import('firebase/firestore');
+      
+      unsubscribe = onSnapshot(
+        doc(db, 'calls', callId),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            const callData = { id: snapshot.id, ...data } as Call;
+            
+            // Debug logging
+            if (callData.transcript) {
+              console.log('[useCall] Transcript updated:', {
+                hasSegments: !!callData.transcript.segments,
+                segmentCount: callData.transcript.segments?.length || 0,
+                status: callData.status,
+              });
+            }
+            
+            setCall(callData);
+          } else {
+            setError('Call not found');
+          }
+        },
+        (err) => {
+          console.error('Error listening to call:', err);
+          setError(err.message);
+        }
+      );
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [callId]);
 
   // Poll for transcription status when transcribing (for local dev when webhooks don't work)

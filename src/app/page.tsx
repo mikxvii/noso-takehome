@@ -8,8 +8,10 @@ import { TranscriptPane } from '@/components/TranscriptPane';
 import { AnalysisPane } from '@/components/AnalysisPane';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { useCall } from '@/hooks/useCall';
-import { storage } from '@/lib/firebase/config';
-import { ref, getDownloadURL } from 'firebase/storage';
+import { storage, ensureInitialized } from '@/lib/firebase/config';
+
+// Prevent static generation - this page requires client-side Firebase
+export const dynamic = 'force-dynamic';
 
 export default function Home() {
   const [currentCallId, setCurrentCallId] = useState<string | undefined>();
@@ -52,6 +54,11 @@ export default function Home() {
     setSelectedTimestamp(currentTime);
   };
 
+  // Initialize Firebase on mount
+  useEffect(() => {
+    ensureInitialized().catch(console.error);
+  }, []);
+
   // Fetch audio URL when call changes
   useEffect(() => {
     const fetchAudioUrl = async () => {
@@ -61,11 +68,21 @@ export default function Home() {
       }
 
       try {
+        // Ensure Firebase is initialized
+        await ensureInitialized();
+        
         // Check if audioPath is already an HTTPS URL
         if (call.audioPath.startsWith('https://')) {
           setAudioUrl(call.audioPath);
         } else {
           // It's a storage path, get download URL
+          if (!storage) {
+            console.error('Firebase Storage is not initialized');
+            setAudioUrl(null);
+            return;
+          }
+          // Dynamic import to avoid build-time execution
+          const { ref, getDownloadURL } = await import('firebase/storage');
           const storageRef = ref(storage, call.audioPath);
           const url = await getDownloadURL(storageRef);
           setAudioUrl(url);
