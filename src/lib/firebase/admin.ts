@@ -71,12 +71,17 @@ function initializeFirebaseAdmin() {
         // Trim leading/trailing whitespace
         privateKey = privateKey.trim();
         
-        // Step 4: Ensure BEGIN and END markers are on their own lines
-        // Fix cases where markers might be concatenated
-        privateKey = privateKey.replace(/([^\n])-----BEGIN/g, '$1\n-----BEGIN');
-        privateKey = privateKey.replace(/-----END([^\n])/g, '-----END\n$1');
+        // Step 4: Fix broken END marker (common issue: "-----END\n PRIVATE KEY-----")
+        // Fix cases where END marker is split across lines
+        privateKey = privateKey.replace(/-----END\s*\n\s*PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
+        privateKey = privateKey.replace(/-----END\s+PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
         
-        // Step 5: Remove any content after the END marker (common issue)
+        // Step 5: Ensure BEGIN and END markers are on their own lines (but keep them intact)
+        // Only add newlines if markers are concatenated with other content
+        privateKey = privateKey.replace(/([^\n])-----BEGIN PRIVATE KEY-----/g, '$1\n-----BEGIN PRIVATE KEY-----');
+        privateKey = privateKey.replace(/-----END PRIVATE KEY-----([^\n])/g, '-----END PRIVATE KEY-----\n$1');
+        
+        // Step 6: Remove any content after the END marker (common issue)
         // The private key should end with "-----END PRIVATE KEY-----\n" or "-----END PRIVATE KEY-----"
         const endMarkerIndex = privateKey.indexOf('-----END PRIVATE KEY-----');
         if (endMarkerIndex !== -1) {
@@ -85,18 +90,24 @@ function initializeFirebaseAdmin() {
           privateKey = privateKey.substring(0, endMarkerEnd).trim() + '\n';
         }
         
-        // Step 6: Remove any content before BEGIN marker
+        // Step 7: Remove any content before BEGIN marker
         const beginMarkerIndex = privateKey.indexOf('-----BEGIN PRIVATE KEY-----');
         if (beginMarkerIndex > 0) {
           privateKey = privateKey.substring(beginMarkerIndex);
         }
         
-        // Step 7: Normalize newlines - ensure consistent \n format
+        // Step 8: Normalize newlines - ensure consistent \n format
         // Remove any double newlines but keep single newlines
         privateKey = privateKey.replace(/\n{3,}/g, '\n\n');
         
-        // Step 8: Ensure the key ends with a single newline
+        // Step 9: Ensure the key ends with a single newline
         privateKey = privateKey.replace(/\n+$/, '\n');
+        
+        // Step 10: Final validation - ensure END marker is intact (not split)
+        if (!privateKey.includes('-----END PRIVATE KEY-----')) {
+          // Try to reconstruct if it's still broken
+          privateKey = privateKey.replace(/-----END[\s\n]+PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
+        }
         
         serviceAccount.private_key = privateKey;
         
