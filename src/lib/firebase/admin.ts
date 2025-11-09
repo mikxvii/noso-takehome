@@ -54,30 +54,63 @@ function initializeFirebaseAdmin() {
 
     try {
       serviceAccount = JSON.parse(serviceAccountJson);
-      // Normalize the private key field - handle escaped newlines
+      // Normalize the private key field - handle escaped newlines and clean up formatting
       // When stored in env vars, newlines might be escaped in various ways
       if (serviceAccount.private_key) {
         let privateKey = serviceAccount.private_key;
         
-        // Handle different escape formats:
-        // 1. Literal \n strings (most common in env vars)
+        // Step 1: Handle different escape formats
+        // Replace literal \n strings with actual newlines
         privateKey = privateKey.replace(/\\n/g, '\n');
         
-        // 2. Already has newlines but might have extra escaping
-        // 3. Handle cases where BEGIN/END markers might be on same line
-        // Ensure proper formatting for PEM format
-        if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN')) {
-          // If no newlines but has BEGIN marker, try to add them
-          privateKey = privateKey.replace(/-----BEGIN/g, '\n-----BEGIN');
-          privateKey = privateKey.replace(/-----END/g, '-----END\n');
-          privateKey = privateKey.replace(/\n\n/g, '\n'); // Remove double newlines
+        // Step 2: Clean up whitespace issues
+        // Remove any carriage returns
+        privateKey = privateKey.replace(/\r/g, '');
+        
+        // Step 3: Ensure proper PEM format
+        // Trim leading/trailing whitespace
+        privateKey = privateKey.trim();
+        
+        // Step 4: Ensure BEGIN and END markers are on their own lines
+        // Fix cases where markers might be concatenated
+        privateKey = privateKey.replace(/([^\n])-----BEGIN/g, '$1\n-----BEGIN');
+        privateKey = privateKey.replace(/-----END([^\n])/g, '-----END\n$1');
+        
+        // Step 5: Remove any content after the END marker (common issue)
+        // The private key should end with "-----END PRIVATE KEY-----\n" or "-----END PRIVATE KEY-----"
+        const endMarkerIndex = privateKey.indexOf('-----END PRIVATE KEY-----');
+        if (endMarkerIndex !== -1) {
+          const endMarkerEnd = endMarkerIndex + '-----END PRIVATE KEY-----'.length;
+          // Keep only up to and including the END marker, plus optional trailing newline
+          privateKey = privateKey.substring(0, endMarkerEnd).trim() + '\n';
         }
+        
+        // Step 6: Remove any content before BEGIN marker
+        const beginMarkerIndex = privateKey.indexOf('-----BEGIN PRIVATE KEY-----');
+        if (beginMarkerIndex > 0) {
+          privateKey = privateKey.substring(beginMarkerIndex);
+        }
+        
+        // Step 7: Normalize newlines - ensure consistent \n format
+        // Remove any double newlines but keep single newlines
+        privateKey = privateKey.replace(/\n{3,}/g, '\n\n');
+        
+        // Step 8: Ensure the key ends with a single newline
+        privateKey = privateKey.replace(/\n+$/, '\n');
         
         serviceAccount.private_key = privateKey;
         
         // Validate the private key format
         if (!serviceAccount.private_key.includes('-----BEGIN PRIVATE KEY-----')) {
           console.warn('Private key may not be properly formatted. Expected PEM format with BEGIN/END markers.');
+        }
+        
+        // Additional validation - check for common issues
+        if (serviceAccount.private_key.split('-----BEGIN PRIVATE KEY-----').length !== 2) {
+          console.warn('Private key may have multiple BEGIN markers or formatting issues.');
+        }
+        if (serviceAccount.private_key.split('-----END PRIVATE KEY-----').length !== 2) {
+          console.warn('Private key may have multiple END markers or formatting issues.');
         }
       }
     } catch (error) {
@@ -90,13 +123,27 @@ function initializeFirebaseAdmin() {
 
   // Initialize with service account using admin.credential.cert()
   try {
-    // Log a sample of the private key for debugging (first 50 chars only)
+    // Log a sample of the private key for debugging
     if (serviceAccount.private_key) {
-      const keyPreview = serviceAccount.private_key.substring(0, 50);
+      const keyPreview = serviceAccount.private_key.substring(0, 80).replace(/\n/g, '\\n');
       const hasNewlines = serviceAccount.private_key.includes('\n');
+      const beginMarker = serviceAccount.private_key.includes('-----BEGIN PRIVATE KEY-----');
+      const endMarker = serviceAccount.private_key.includes('-----END PRIVATE KEY-----');
+      const lines = serviceAccount.private_key.split('\n').length;
+      
       console.log('[Firebase Admin] Private key preview:', keyPreview + '...');
-      console.log('[Firebase Admin] Private key has newlines:', hasNewlines);
-      console.log('[Firebase Admin] Private key length:', serviceAccount.private_key.length);
+      console.log('[Firebase Admin] Private key stats:', {
+        hasNewlines,
+        hasBeginMarker: beginMarker,
+        hasEndMarker: endMarker,
+        lineCount: lines,
+        length: serviceAccount.private_key.length,
+        endsWithNewline: serviceAccount.private_key.endsWith('\n'),
+      });
+      
+      // Show the last 50 chars to check for trailing content
+      const last50 = serviceAccount.private_key.slice(-50).replace(/\n/g, '\\n');
+      console.log('[Firebase Admin] Private key ending:', last50);
     }
     
     return admin.initializeApp({
@@ -105,13 +152,19 @@ function initializeFirebaseAdmin() {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('private key') || errorMessage.includes('PEM')) {
-      throw new Error(
-        'Failed to parse Firebase service account private key. ' +
-        'Ensure the private_key field is properly formatted with actual newlines. ' +
-        'The private key should look like: "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n" ' +
-        `Original error: ${errorMessage}`
-      );
+    console.error('[Firebase Admin] Initialization error:', errorMessage);
+    
+    if (errorMessage.includes('private key') || errorMessage.includes('PEM') || errorMessage.includes('DER')) {
+      // Provide more helpful error message
+      let helpfulMessage = 'Failed to parse Firebase service account private key.\n';
+      helpfulMessage += 'Common causes:\n';
+      helpfulMessage += '1. Extra content after the END marker\n';
+      helpfulMessage += '2. Missing or extra newlines\n';
+      helpfulMessage += '3. Corrupted key data\n';
+      helpfulMessage += '\nTry regenerating the service account key from Firebase Console.\n';
+      helpfulMessage += `Original error: ${errorMessage}`;
+      
+      throw new Error(helpfulMessage);
     }
     throw error;
   }
