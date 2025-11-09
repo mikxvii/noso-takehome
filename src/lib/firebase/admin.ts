@@ -11,6 +11,110 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
+ * Normalize private key to proper PEM format
+ * Handles escaped newlines, whitespace issues, and ensures proper formatting
+ */
+function normalizePrivateKey(privateKey: string): string {
+  // Step 1: Handle different escape formats
+  // Replace literal \n strings with actual newlines
+  privateKey = privateKey.replace(/\\n/g, '\n');
+  
+  // Step 2: Clean up whitespace issues
+  // Remove any carriage returns
+  privateKey = privateKey.replace(/\r/g, '');
+  
+  // Step 3: Ensure proper PEM format
+  // Trim leading/trailing whitespace
+  privateKey = privateKey.trim();
+  
+  // Step 3.5: Extract and clean the base64 content
+  // The PEM format should be:
+  // -----BEGIN PRIVATE KEY-----
+  // <base64 content>
+  // -----END PRIVATE KEY-----
+  const beginMatch = privateKey.match(/-----BEGIN PRIVATE KEY-----\s*\n?/);
+  const endMatch = privateKey.match(/\n?\s*-----END PRIVATE KEY-----/);
+  
+  if (beginMatch && endMatch) {
+    // Extract just the base64 content between markers
+    const beginEnd = beginMatch[0].length;
+    const endStart = endMatch.index!;
+    const base64Content = privateKey.substring(beginEnd, endStart);
+    
+    // Clean the base64 content: remove all whitespace, keep only valid base64 chars
+    let cleanedBase64 = base64Content
+      .replace(/[^A-Za-z0-9+/=]/g, '') // Remove all non-base64 characters
+      .replace(/\s+/g, ''); // Remove any remaining whitespace
+    
+    // Validate base64 content is not empty and has reasonable length
+    if (!cleanedBase64 || cleanedBase64.length < 100) {
+      throw new Error('Private key base64 content appears to be invalid or too short');
+    }
+    
+    // Format base64 into lines of 64 characters (standard PEM format)
+    // This helps with compatibility with various decoders
+    const formattedBase64 = cleanedBase64.match(/.{1,64}/g)?.join('\n') || cleanedBase64;
+    
+    // Reconstruct the private key with properly formatted base64
+    // Ensure BEGIN marker ends with newline, base64 is formatted, END marker is on its own line
+    privateKey = '-----BEGIN PRIVATE KEY-----\n' + formattedBase64 + '\n-----END PRIVATE KEY-----';
+  }
+  
+  // Step 4: Fix broken END marker (common issue: "-----END\n PRIVATE KEY-----")
+  // Fix cases where END marker is split across lines
+  privateKey = privateKey.replace(/-----END\s*\n\s*PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
+  privateKey = privateKey.replace(/-----END\s+PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
+  
+  // Step 5: Ensure BEGIN and END markers are on their own lines (but keep them intact)
+  // Only add newlines if markers are concatenated with other content
+  privateKey = privateKey.replace(/([^\n])-----BEGIN PRIVATE KEY-----/g, '$1\n-----BEGIN PRIVATE KEY-----');
+  privateKey = privateKey.replace(/-----END PRIVATE KEY-----([^\n])/g, '-----END PRIVATE KEY-----\n$1');
+  
+  // Step 6: Remove any content after the END marker (common issue)
+  // The private key should end with "-----END PRIVATE KEY-----\n" or "-----END PRIVATE KEY-----"
+  const endMarkerIndex = privateKey.indexOf('-----END PRIVATE KEY-----');
+  if (endMarkerIndex !== -1) {
+    const endMarkerEnd = endMarkerIndex + '-----END PRIVATE KEY-----'.length;
+    // Keep only up to and including the END marker, plus optional trailing newline
+    privateKey = privateKey.substring(0, endMarkerEnd).trim() + '\n';
+  }
+  
+  // Step 7: Remove any content before BEGIN marker
+  const beginMarkerIndex = privateKey.indexOf('-----BEGIN PRIVATE KEY-----');
+  if (beginMarkerIndex > 0) {
+    privateKey = privateKey.substring(beginMarkerIndex);
+  }
+  
+  // Step 8: Normalize newlines - ensure consistent \n format
+  // Remove any double newlines but keep single newlines
+  privateKey = privateKey.replace(/\n{3,}/g, '\n\n');
+  
+  // Step 9: Ensure the key ends with a single newline
+  privateKey = privateKey.replace(/\n+$/, '\n');
+  
+  // Step 10: Final validation - ensure END marker is intact (not split)
+  if (!privateKey.includes('-----END PRIVATE KEY-----')) {
+    // Try to reconstruct if it's still broken
+    privateKey = privateKey.replace(/-----END[\s\n]+PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
+  }
+  
+  // Validate the private key format
+  if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    console.warn('Private key may not be properly formatted. Expected PEM format with BEGIN/END markers.');
+  }
+  
+  // Additional validation - check for common issues
+  if (privateKey.split('-----BEGIN PRIVATE KEY-----').length !== 2) {
+    console.warn('Private key may have multiple BEGIN markers or formatting issues.');
+  }
+  if (privateKey.split('-----END PRIVATE KEY-----').length !== 2) {
+    console.warn('Private key may have multiple END markers or formatting issues.');
+  }
+  
+  return privateKey;
+}
+
+/**
  * Initialize Firebase Admin SDK (singleton pattern with lazy initialization)
  *
  * Supports two methods:
@@ -34,6 +138,12 @@ function initializeFirebaseAdmin() {
       const fileContents = fs.readFileSync(serviceAccountPath, 'utf8');
       serviceAccount = JSON.parse(fileContents);
       console.log('Loaded Firebase service account from file');
+      
+      // Apply the same normalization logic to file-loaded keys
+      // Even though JSON.parse converts \n, we still need to ensure proper PEM format
+      if (serviceAccount.private_key) {
+        serviceAccount.private_key = normalizePrivateKey(serviceAccount.private_key);
+      }
     } catch (error) {
       throw new Error(
         `Failed to parse firebase-service-account.json: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -57,95 +167,7 @@ function initializeFirebaseAdmin() {
       // Normalize the private key field - handle escaped newlines and clean up formatting
       // When stored in env vars, newlines might be escaped in various ways
       if (serviceAccount.private_key) {
-        let privateKey = serviceAccount.private_key;
-        
-        // Step 1: Handle different escape formats
-        // Replace literal \n strings with actual newlines
-        privateKey = privateKey.replace(/\\n/g, '\n');
-        
-        // Step 2: Clean up whitespace issues
-        // Remove any carriage returns
-        privateKey = privateKey.replace(/\r/g, '');
-        
-        // Step 3: Ensure proper PEM format
-        // Trim leading/trailing whitespace
-        privateKey = privateKey.trim();
-        
-        // Step 3.5: Extract and clean the base64 content
-        // The PEM format should be:
-        // -----BEGIN PRIVATE KEY-----
-        // <base64 content>
-        // -----END PRIVATE KEY-----
-        const beginMatch = privateKey.match(/-----BEGIN PRIVATE KEY-----\s*\n?/);
-        const endMatch = privateKey.match(/\n?\s*-----END PRIVATE KEY-----/);
-        
-        if (beginMatch && endMatch) {
-          // Extract just the base64 content between markers
-          const beginEnd = beginMatch[0].length;
-          const endStart = endMatch.index!;
-          const base64Content = privateKey.substring(beginEnd, endStart);
-          
-          // Clean the base64 content: remove all whitespace, keep only valid base64 chars
-          const cleanedBase64 = base64Content
-            .replace(/[^A-Za-z0-9+/=]/g, '') // Remove all non-base64 characters
-            .replace(/\s+/g, ''); // Remove any remaining whitespace
-          
-          // Reconstruct the private key with cleaned base64
-          privateKey = beginMatch[0] + cleanedBase64 + '\n' + endMatch[0];
-        }
-        
-        // Step 4: Fix broken END marker (common issue: "-----END\n PRIVATE KEY-----")
-        // Fix cases where END marker is split across lines
-        privateKey = privateKey.replace(/-----END\s*\n\s*PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
-        privateKey = privateKey.replace(/-----END\s+PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
-        
-        // Step 5: Ensure BEGIN and END markers are on their own lines (but keep them intact)
-        // Only add newlines if markers are concatenated with other content
-        privateKey = privateKey.replace(/([^\n])-----BEGIN PRIVATE KEY-----/g, '$1\n-----BEGIN PRIVATE KEY-----');
-        privateKey = privateKey.replace(/-----END PRIVATE KEY-----([^\n])/g, '-----END PRIVATE KEY-----\n$1');
-        
-        // Step 6: Remove any content after the END marker (common issue)
-        // The private key should end with "-----END PRIVATE KEY-----\n" or "-----END PRIVATE KEY-----"
-        const endMarkerIndex = privateKey.indexOf('-----END PRIVATE KEY-----');
-        if (endMarkerIndex !== -1) {
-          const endMarkerEnd = endMarkerIndex + '-----END PRIVATE KEY-----'.length;
-          // Keep only up to and including the END marker, plus optional trailing newline
-          privateKey = privateKey.substring(0, endMarkerEnd).trim() + '\n';
-        }
-        
-        // Step 7: Remove any content before BEGIN marker
-        const beginMarkerIndex = privateKey.indexOf('-----BEGIN PRIVATE KEY-----');
-        if (beginMarkerIndex > 0) {
-          privateKey = privateKey.substring(beginMarkerIndex);
-        }
-        
-        // Step 8: Normalize newlines - ensure consistent \n format
-        // Remove any double newlines but keep single newlines
-        privateKey = privateKey.replace(/\n{3,}/g, '\n\n');
-        
-        // Step 9: Ensure the key ends with a single newline
-        privateKey = privateKey.replace(/\n+$/, '\n');
-        
-        // Step 10: Final validation - ensure END marker is intact (not split)
-        if (!privateKey.includes('-----END PRIVATE KEY-----')) {
-          // Try to reconstruct if it's still broken
-          privateKey = privateKey.replace(/-----END[\s\n]+PRIVATE KEY-----/g, '-----END PRIVATE KEY-----');
-        }
-        
-        serviceAccount.private_key = privateKey;
-        
-        // Validate the private key format
-        if (!serviceAccount.private_key.includes('-----BEGIN PRIVATE KEY-----')) {
-          console.warn('Private key may not be properly formatted. Expected PEM format with BEGIN/END markers.');
-        }
-        
-        // Additional validation - check for common issues
-        if (serviceAccount.private_key.split('-----BEGIN PRIVATE KEY-----').length !== 2) {
-          console.warn('Private key may have multiple BEGIN markers or formatting issues.');
-        }
-        if (serviceAccount.private_key.split('-----END PRIVATE KEY-----').length !== 2) {
-          console.warn('Private key may have multiple END markers or formatting issues.');
-        }
+        serviceAccount.private_key = normalizePrivateKey(serviceAccount.private_key);
       }
     } catch (error) {
       const parseError = error instanceof Error ? error.message : 'Unknown error';
