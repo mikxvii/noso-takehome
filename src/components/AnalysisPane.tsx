@@ -17,14 +17,8 @@ interface AnalysisPaneProps {
   analysis: Analysis | null;
   isLoading?: boolean;
   onTimestampClick?: (timestamp: number) => void;
+  highlightSegmentRange?: { start: number; end: number } | null;
 }
-
-const QUALITY_COLORS = {
-  excellent: '#10b981',
-  good: '#3b82f6',
-  ok: '#f59e0b',
-  poor: '#ef4444',
-};
 
 const STAGE_NAMES: Record<string, string> = {
   introduction: 'Introduction',
@@ -41,42 +35,30 @@ const formatTimestamp = (seconds: number) => {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 };
 
-// Progress Bar Component
-const ProgressBar = ({ value, label, color }: { value: number; label: string; color: string }) => {
+// Progress Bar Score Badge Component with visual grading
+const ScoreBadge = ({ value, label, color }: { value: number; label: string; color: string }) => {
   const percentage = Math.round(value);
-  const colorClasses = {
-    emerald: 'bg-emerald-500',
-    blue: 'bg-blue-500',
-    purple: 'bg-purple-500',
-    teal: 'bg-teal-500',
-  };
-  const bgColorClasses = {
-    emerald: 'bg-emerald-500/10 border-emerald-500/30',
-    blue: 'bg-blue-500/10 border-blue-500/30',
-    purple: 'bg-purple-500/10 border-purple-500/30',
-    teal: 'bg-teal-500/10 border-teal-500/30',
-  };
-  const textColorClasses = {
-    emerald: 'text-emerald-300',
-    blue: 'text-blue-300',
-    purple: 'text-purple-300',
-    teal: 'text-teal-300',
+
+  // Grade based on percentage
+  const getGrade = (score: number) => {
+    if (score >= 90) return { letter: 'A', textColor: 'text-emerald-400', barColor: 'bg-emerald-500', borderColor: 'border-emerald-500/30', bgColor: 'bg-emerald-500/10' };
+    if (score >= 80) return { letter: 'B', textColor: 'text-blue-400', barColor: 'bg-blue-500', borderColor: 'border-blue-500/30', bgColor: 'bg-blue-500/10' };
+    if (score >= 70) return { letter: 'C', textColor: 'text-yellow-400', barColor: 'bg-yellow-500', borderColor: 'border-yellow-500/30', bgColor: 'bg-yellow-500/10' };
+    if (score >= 60) return { letter: 'D', textColor: 'text-orange-400', barColor: 'bg-orange-500', borderColor: 'border-orange-500/30', bgColor: 'bg-orange-500/10' };
+    return { letter: 'F', textColor: 'text-red-400', barColor: 'bg-red-500', borderColor: 'border-red-500/30', bgColor: 'bg-red-500/10' };
   };
 
-  const colorKey = color as keyof typeof colorClasses;
-  const bgClass = bgColorClasses[colorKey] || bgColorClasses.emerald;
-  const textClass = textColorClasses[colorKey] || textColorClasses.emerald;
-  const barClass = colorClasses[colorKey] || colorClasses.emerald;
+  const grade = getGrade(percentage);
 
   return (
-    <div className={`rounded-lg border ${bgClass} p-4`}>
+    <div className={`rounded-lg border ${grade.borderColor} ${grade.bgColor} p-3 overflow-hidden`}>
       <div className="flex items-center justify-between mb-2">
-        <span className={`text-sm font-semibold ${textClass}`}>{label}</span>
-        <span className={`text-xl font-bold ${textClass}`}>{percentage}%</span>
+        <span className={`text-base font-bold ${grade.textColor}`}>{label}</span>
+        <span className={`text-2xl font-bold ${grade.textColor}`}>{grade.letter}</span>
       </div>
-      <div className="w-full bg-zinc-800/50 rounded-full h-3 overflow-hidden">
+      <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
         <div
-          className={`h-full ${barClass} transition-all duration-500 ease-out rounded-full`}
+          className={`h-full ${grade.barColor} transition-all duration-500`}
           style={{ width: `${percentage}%` }}
         />
       </div>
@@ -113,30 +95,43 @@ const SidebarNav = ({ sections, activeSection, onSectionClick }: {
 const StageDetail = ({
   stageName,
   stage,
-  onTimestampClick
+  onTimestampClick,
+  isInHighlightedSegment
 }: {
   stageName: string;
   stage: StageEvaluation;
   onTimestampClick?: (timestamp: number) => void;
+  isInHighlightedSegment?: (timestamp: number | null | undefined) => boolean;
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [showEvidence, setShowEvidence] = useState(false);
 
-  const qualityColor = QUALITY_COLORS[stage.quality];
   const qualityText = stage.quality.charAt(0).toUpperCase() + stage.quality.slice(1);
 
+  // Get quality badge style
+  const getQualityBadge = (quality: string) => {
+    const badges = {
+      excellent: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30' },
+      good: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
+      ok: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+      poor: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30' },
+    };
+    return badges[quality as keyof typeof badges] || badges.ok;
+  };
+
+  const badge = getQualityBadge(stage.quality);
+
   return (
-    <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/30">
+    <div className={`rounded-lg border ${badge.border} bg-zinc-800/30`}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-zinc-800/50 transition-colors rounded-lg"
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: qualityColor }}
-          />
-          <span className="text-base font-semibold text-white">{STAGE_NAMES[stageName]}</span>
-          <span className="text-xs text-zinc-500">{qualityText}</span>
+        <div className="flex items-center gap-3 flex-1">
+          <div className={`px-3 py-1 rounded-md ${badge.bg} ${badge.text} border ${badge.border}`}>
+            <span className="text-xs font-bold uppercase">{qualityText}</span>
+          </div>
+          <span className="text-sm font-semibold text-white">{STAGE_NAMES[stageName]}</span>
         </div>
         {isExpanded ? (
           <ChevronUp className="h-4 w-4 text-zinc-400" />
@@ -147,45 +142,313 @@ const StageDetail = ({
 
       {isExpanded && (
         <div className="px-4 pb-4 space-y-3">
-          {/* Notes - Make this more prominent */}
+          {/* Feedback with strengths/weaknesses if structured */}
           {stage.notes && (
-            <div className="text-sm text-zinc-200 leading-relaxed bg-zinc-900/50 rounded-lg p-3 border border-zinc-700/30">
-              <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Feedback</div>
-              <p className="text-base text-white">{stage.notes}</p>
+            <div className="text-sm text-zinc-200 leading-relaxed">
+              {stage.notes.split('\n').map((line, idx) => {
+                // Check if line starts with **text**: to make it bold
+                if (line.trim().startsWith('**') && line.includes('**')) {
+                  const boldText = line.match(/\*\*(.*?)\*\*/)?.[1] || '';
+                  const restText = line.replace(/\*\*.*?\*\*/, '');
+                  return (
+                    <div key={idx} className="font-bold text-white mt-3 first:mt-0">
+                      {boldText}{restText}
+                    </div>
+                  );
+                }
+                // Check if line starts with - for bullet points
+                if (line.trim().startsWith('-')) {
+                  return (
+                    <div key={idx} className="ml-4 text-zinc-300">
+                      • {line.trim().substring(1).trim()}
+                    </div>
+                  );
+                }
+                // Empty lines for spacing
+                if (line.trim() === '') {
+                  return <div key={idx} className="h-2" />;
+                }
+                // Regular text
+                return <div key={idx} className="text-zinc-300">{line}</div>;
+              })}
             </div>
           )}
 
-          {/* Evidence */}
+          {/* Collapsible Evidence */}
           {stage.evidence && stage.evidence.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-zinc-400">Evidence:</div>
-              {stage.evidence.map((ev, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    if (ev.timestamp !== null && ev.timestamp !== undefined && onTimestampClick) {
-                      onTimestampClick(ev.timestamp);
-                    }
-                  }}
-                  disabled={ev.timestamp === null || ev.timestamp === undefined}
-                  className={`w-full text-left bg-zinc-900/50 rounded p-2 border border-zinc-700/30 transition-all ${
-                    ev.timestamp !== null && ev.timestamp !== undefined
-                      ? 'hover:bg-zinc-800/70 hover:border-emerald-500/50 cursor-pointer'
-                      : 'cursor-default'
-                  }`}
-                >
-                  <div className="flex items-start gap-2 mb-1">
-                    <Clock className="h-3 w-3 text-emerald-500 mt-0.5 flex-shrink-0" />
-                    <span className="text-xs text-emerald-400 font-mono">
-                      {formatTimestamp(ev.timestamp || 0)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-zinc-300 italic pl-5">
-                    "{ev.quote}"
-                  </div>
-                </button>
-              ))}
+              <button
+                onClick={() => setShowEvidence(!showEvidence)}
+                className="flex items-center gap-2 text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                {showEvidence ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                <span>{showEvidence ? 'Hide' : 'Show'} Evidence ({stage.evidence.length})</span>
+              </button>
+              {showEvidence && (
+                <div className="space-y-2 pl-2">
+                  {stage.evidence.map((ev, idx) => {
+                    const isHighlighted = isInHighlightedSegment ? isInHighlightedSegment(ev.timestamp) : false;
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          if (ev.timestamp !== null && ev.timestamp !== undefined && onTimestampClick) {
+                            onTimestampClick(ev.timestamp);
+                          }
+                        }}
+                        disabled={ev.timestamp === null || ev.timestamp === undefined}
+                        className={`w-full text-left bg-zinc-900/50 rounded p-2 border transition-all ${
+                          ev.timestamp !== null && ev.timestamp !== undefined
+                            ? 'hover:bg-zinc-800/70 hover:border-emerald-500/50 cursor-pointer'
+                            : 'cursor-default'
+                        } ${
+                          isHighlighted
+                            ? 'ring-2 ring-purple-500 bg-purple-500/20 border-purple-500/50'
+                            : 'border-zinc-700/30'
+                        }`}
+                      >
+                      <div className="flex items-start gap-2 mb-1">
+                        <Clock className="h-3 w-3 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-xs text-emerald-400 font-mono">
+                          {formatTimestamp(ev.timestamp || 0)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-zinc-300 italic pl-5">
+                        "{ev.quote}"
+                      </div>
+                    </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Checklist Item Component (to avoid hook violations)
+const ChecklistItem = ({
+  item,
+  onTimestampClick,
+  isHighlighted
+}: {
+  item: { id: string; label: string; passed: boolean; evidence?: string; timestamp?: number | null };
+  onTimestampClick?: (timestamp: number) => void;
+  isHighlighted?: boolean;
+}) => {
+  const [showEvidence, setShowEvidence] = useState(false);
+
+  return (
+    <div className="group">
+      <div
+        onClick={() => {
+          if (item.timestamp !== null && item.timestamp !== undefined && onTimestampClick) {
+            onTimestampClick(item.timestamp);
+          }
+        }}
+        className={`w-full text-left py-2 px-2 rounded transition-colors ${
+          item.timestamp !== null && item.timestamp !== undefined
+            ? 'hover:bg-zinc-700/30 cursor-pointer'
+            : 'cursor-default'
+        } ${isHighlighted ? 'ring-2 ring-purple-500 bg-purple-500/20' : ''}`}
+      >
+        <div className="flex items-center gap-2">
+          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+            item.passed
+              ? 'bg-emerald-500 border-emerald-500'
+              : 'bg-zinc-800 border-amber-500'
+          }`}>
+            {item.passed && (
+              <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />
+            )}
+          </div>
+          <span className={`text-sm flex-1 ${item.passed ? 'text-zinc-300' : 'text-amber-300'}`}>
+            {item.label}
+          </span>
+          {item.timestamp !== null && item.timestamp !== undefined && (
+            <span className="text-xs text-emerald-400 font-mono">
+              {formatTimestamp(item.timestamp)}
+            </span>
+          )}
+          {item.evidence && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEvidence(!showEvidence);
+              }}
+              className="text-xs text-zinc-500 hover:text-zinc-300 ml-1"
+            >
+              {showEvidence ? '▼' : '▶'}
+            </button>
+          )}
+        </div>
+      </div>
+      {item.evidence && showEvidence && (
+        <div className="ml-6 mt-1 mb-2 text-xs text-zinc-400 italic bg-zinc-900/50 rounded p-2 border border-zinc-700/30">
+          "{item.evidence}"
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Sales Insight Item Component with collapsible evidence
+const SalesInsightItem = ({
+  insight,
+  onTimestampClick,
+  isHighlighted
+}: {
+  insight: { snippet?: string; timestamp?: number | null; note: string; severity?: string };
+  onTimestampClick?: (timestamp: number) => void;
+  isHighlighted?: boolean;
+}) => {
+  const [showEvidence, setShowEvidence] = useState(false);
+
+  const severityStyle = insight.severity === 'high'
+    ? { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', badgeBg: 'bg-emerald-500/20' }
+    : insight.severity === 'med'
+    ? { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400', badgeBg: 'bg-yellow-500/20' }
+    : { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400', badgeBg: 'bg-red-500/20' };
+
+  return (
+    <div className={`rounded-lg border ${severityStyle.border} ${severityStyle.bg} p-4 transition-all ${
+      isHighlighted ? 'ring-2 ring-purple-500 bg-purple-500/20 scale-[1.02]' : ''
+    }`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className={`px-3 py-1 rounded-md text-xs font-bold ${severityStyle.badgeBg} ${severityStyle.text}`}>
+          {insight.severity?.toUpperCase() || 'INFO'}
+        </div>
+        {insight.timestamp !== undefined && insight.timestamp !== null && (
+          <button
+            onClick={() => {
+              if (onTimestampClick) {
+                onTimestampClick(insight.timestamp!);
+              }
+            }}
+            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+          >
+            <Clock className={`h-3 w-3 ${severityStyle.text}`} />
+            <span className={`text-xs font-mono ${severityStyle.text}`}>
+              {formatTimestamp(insight.timestamp)}
+            </span>
+          </button>
+        )}
+      </div>
+      <div className={`text-sm font-medium mb-2 ${severityStyle.text}`}>{insight.note}</div>
+
+      {/* Collapsible Evidence */}
+      {insight.snippet && (
+        <div className="space-y-2">
+          <button
+            onClick={() => setShowEvidence(!showEvidence)}
+            className={`flex items-center gap-2 text-xs font-medium ${severityStyle.text} hover:opacity-80 transition-opacity`}
+          >
+            {showEvidence ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            <span>{showEvidence ? 'Hide' : 'Show'} Evidence</span>
+          </button>
+          {showEvidence && (
+            <button
+              onClick={() => {
+                if (insight.timestamp !== null && insight.timestamp !== undefined && onTimestampClick) {
+                  onTimestampClick(insight.timestamp);
+                }
+              }}
+              disabled={insight.timestamp === null || insight.timestamp === undefined}
+              className={`w-full text-left bg-zinc-900/50 rounded p-2 border border-zinc-700/30 transition-all ${
+                insight.timestamp !== null && insight.timestamp !== undefined
+                  ? 'hover:bg-zinc-800/70 hover:border-emerald-500/50 cursor-pointer'
+                  : 'cursor-default'
+              }`}
+            >
+              <div className="text-xs italic text-zinc-300">"{insight.snippet}"</div>
+              {insight.timestamp !== null && insight.timestamp !== undefined && (
+                <div className="flex items-center gap-1 mt-1">
+                  <Clock className="h-3 w-3 text-zinc-500" />
+                  <span className="text-xs text-zinc-500">Click to view in transcript</span>
+                </div>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Missed Opportunity Item Component with collapsible evidence
+const MissedOpportunityItem = ({
+  opportunity,
+  onTimestampClick,
+  isHighlighted
+}: {
+  opportunity: { recommendation: string; snippet?: string; timestamp?: number | null };
+  onTimestampClick?: (timestamp: number) => void;
+  isHighlighted?: boolean;
+}) => {
+  const [showEvidence, setShowEvidence] = useState(false);
+
+  return (
+    <div className={`rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 transition-all ${
+      isHighlighted ? 'ring-2 ring-purple-500 bg-purple-500/20 scale-[1.02]' : ''
+    }`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-amber-400" />
+          <span className="text-xs font-bold text-amber-400 uppercase">Opportunity</span>
+        </div>
+        {opportunity.timestamp !== undefined && opportunity.timestamp !== null && (
+          <button
+            onClick={() => {
+              if (onTimestampClick) {
+                onTimestampClick(opportunity.timestamp!);
+              }
+            }}
+            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+          >
+            <Clock className="h-3 w-3 text-amber-400" />
+            <span className="text-xs text-amber-400 font-mono">
+              {formatTimestamp(opportunity.timestamp)}
+            </span>
+          </button>
+        )}
+      </div>
+      <div className="text-sm font-medium text-amber-300 mb-2">{opportunity.recommendation}</div>
+
+      {/* Collapsible Evidence */}
+      {opportunity.snippet && (
+        <div className="space-y-2">
+          <button
+            onClick={() => setShowEvidence(!showEvidence)}
+            className="flex items-center gap-2 text-xs font-medium text-amber-400 hover:opacity-80 transition-opacity"
+          >
+            {showEvidence ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            <span>{showEvidence ? 'Hide' : 'Show'} Evidence</span>
+          </button>
+          {showEvidence && (
+            <button
+              onClick={() => {
+                if (opportunity.timestamp !== null && opportunity.timestamp !== undefined && onTimestampClick) {
+                  onTimestampClick(opportunity.timestamp);
+                }
+              }}
+              disabled={opportunity.timestamp === null || opportunity.timestamp === undefined}
+              className={`w-full text-left bg-zinc-900/50 rounded p-2 border border-zinc-700/30 transition-all ${
+                opportunity.timestamp !== null && opportunity.timestamp !== undefined
+                  ? 'hover:bg-zinc-800/70 hover:border-amber-500/50 cursor-pointer'
+                  : 'cursor-default'
+              }`}
+            >
+              <div className="text-xs italic text-zinc-300">"{opportunity.snippet}"</div>
+              {opportunity.timestamp !== null && opportunity.timestamp !== undefined && (
+                <div className="flex items-center gap-1 mt-1">
+                  <Clock className="h-3 w-3 text-zinc-500" />
+                  <span className="text-xs text-zinc-500">Click to view in transcript</span>
+                </div>
+              )}
+            </button>
           )}
         </div>
       )}
@@ -202,9 +465,17 @@ const NAV_SECTIONS = [
   { id: 'opportunities', label: 'Opportunities', icon: <Target className="h-4 w-4" /> },
 ];
 
-export function AnalysisPane({ analysis, isLoading, onTimestampClick }: AnalysisPaneProps) {
+export function AnalysisPane({ analysis, isLoading, onTimestampClick, highlightSegmentRange }: AnalysisPaneProps) {
   const [activeSection, setActiveSection] = useState('summary');
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Helper to check if a timestamp falls within the highlighted segment range
+  const isInHighlightedSegment = (timestamp: number | null | undefined): boolean => {
+    if (!highlightSegmentRange || timestamp === null || timestamp === undefined) {
+      return false;
+    }
+    return timestamp >= highlightSegmentRange.start && timestamp <= highlightSegmentRange.end;
+  };
 
   const scrollToSection = (sectionId: string) => {
     const element = sectionRefs.current[sectionId];
@@ -343,62 +614,79 @@ export function AnalysisPane({ analysis, isLoading, onTimestampClick }: Analysis
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto analysis-content">
-          <div className="p-6 space-y-8">
-          {/* AI Summary */}
+          <div className="p-6 space-y-6">
+          {/* Call Type - Moved to top */}
           <div
             ref={(el) => { sectionRefs.current.summary = el; }}
             className="scroll-mt-6"
           >
-            <div className="mb-4 flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-blue-400" />
-              <h2 className="text-lg font-semibold text-white">Call Summary</h2>
+            <div className="rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 p-4">
+              <div className="text-xs text-amber-300/70 uppercase tracking-wide font-medium mb-2">Call Type</div>
+              <div className="text-xl font-bold text-white flex items-center gap-2">
+                <div className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                {analysis.callTypePrediction}
+              </div>
             </div>
-            <div className="rounded-lg bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/30 p-5">
-              <p className="text-base text-zinc-200 leading-relaxed">
+          </div>
+
+          {/* AI Summary */}
+          <div className="scroll-mt-6">
+            <div className="mb-3 flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-blue-400" />
+              <h3 className="text-sm font-semibold text-white uppercase tracking-wide">Summary</h3>
+            </div>
+            <div className="rounded-lg bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/30 p-4">
+              <p className="text-sm text-zinc-200 leading-relaxed">
                 {analysis.summary}
               </p>
             </div>
           </div>
 
-          {/* Performance Metrics */}
+          {/* General Feedback */}
+          <div className="scroll-mt-6">
+            <div className="mb-3 flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-purple-400" />
+              <h3 className="text-sm font-semibold text-white uppercase tracking-wide">General Feedback</h3>
+            </div>
+            <div className="rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 p-4 space-y-3">
+              {analysis.generalFeedback.split('\n\n').map((paragraph: string, idx: number) => (
+                <p key={idx} className="text-sm text-zinc-200 leading-relaxed">
+                  {paragraph.trim()}
+                </p>
+              ))}
+            </div>
+          </div>
+
+          {/* Performance Metrics - Compressed */}
           <div
             ref={(el) => { sectionRefs.current.metrics = el; }}
             className="scroll-mt-6"
           >
-            <div className="mb-4 flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-emerald-400" />
-              <h2 className="text-lg font-semibold text-white">Performance Metrics</h2>
+            <div className="mb-3 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-emerald-400" />
+              <h3 className="text-sm font-semibold text-white uppercase tracking-wide">Performance</h3>
             </div>
-            <div className="grid grid-cols-1 gap-4">
-              <ProgressBar
+            <div className="grid grid-cols-2 gap-2">
+              <ScoreBadge
                 value={analysis.scores.complianceOverall}
                 label="Compliance"
                 color="emerald"
               />
-              <ProgressBar
+              <ScoreBadge
                 value={analysis.scores.clarity}
                 label="Clarity"
                 color="blue"
               />
-              <ProgressBar
+              <ScoreBadge
                 value={analysis.scores.empathy}
                 label="Empathy"
                 color="purple"
               />
-              <ProgressBar
+              <ScoreBadge
                 value={analysis.scores.professionalism}
                 label="Professionalism"
                 color="teal"
               />
-            </div>
-
-            {/* Call Type */}
-            <div className="mt-4 rounded-lg bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 border border-zinc-700/50 p-4">
-              <div className="text-xs text-zinc-400 uppercase tracking-wide font-medium mb-2">Call Type</div>
-              <div className="text-lg font-semibold text-white flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-amber-400" />
-                {analysis.callTypePrediction}
-              </div>
             </div>
           </div>
 
@@ -412,7 +700,10 @@ export function AnalysisPane({ analysis, isLoading, onTimestampClick }: Analysis
               <h2 className="text-lg font-semibold text-white">Conversation Stages</h2>
             </div>
             <div className="space-y-3">
-              {Object.entries(analysis.stages).map(([key, stage]) => {
+              {/* Sort stages chronologically */}
+              {(['introduction', 'diagnosis', 'solutionExplanation', 'upsell', 'maintenancePlan', 'closing'] as const)
+                .map(key => [key, analysis.stages[key]] as const)
+                .map(([key, stage]) => {
                 if (!stage.present) {
                   return (
                     <div key={key} className="rounded-lg border border-zinc-700/50 bg-zinc-800/30 px-4 py-3">
@@ -427,65 +718,31 @@ export function AnalysisPane({ analysis, isLoading, onTimestampClick }: Analysis
                     </div>
                   );
                 }
-                return <StageDetail key={key} stageName={key} stage={stage} onTimestampClick={onTimestampClick} />;
+                return <StageDetail key={key} stageName={key} stage={stage} onTimestampClick={onTimestampClick} isInHighlightedSegment={isInHighlightedSegment} />;
               })}
             </div>
           </div>
 
-          {/* Checklist */}
+          {/* Checklist - Actual checklist style */}
           <div
             ref={(el) => { sectionRefs.current.checklist = el; }}
             className="scroll-mt-6"
           >
-            <div className="mb-4 flex items-center gap-2">
-              <ListChecks className="h-5 w-5 text-emerald-400" />
-              <h2 className="text-lg font-semibold text-white">Call Quality Checklist</h2>
+            <div className="mb-3 flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-emerald-400" />
+              <h3 className="text-sm font-semibold text-white uppercase tracking-wide">Quality Checklist</h3>
             </div>
-            <div className="space-y-3">
-              {analysis.checklist.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    if (item.timestamp !== null && item.timestamp !== undefined && onTimestampClick) {
-                      onTimestampClick(item.timestamp);
-                    }
-                  }}
-                  disabled={item.timestamp === null && item.timestamp === undefined}
-                  className={`w-full text-left rounded-lg border p-4 transition-all ${
-                    item.passed
-                      ? 'border-emerald-500/30 bg-emerald-500/5'
-                      : 'border-amber-500/30 bg-amber-500/5'
-                  } ${
-                    item.timestamp !== null && item.timestamp !== undefined
-                      ? 'hover:scale-[1.01] hover:shadow-lg cursor-pointer'
-                      : 'cursor-default'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {item.passed ? (
-                      <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-500 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-500 mt-0.5" />
-                    )}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="text-sm font-semibold text-white">{item.label}</div>
-                        {item.timestamp !== null && item.timestamp !== undefined && (
-                          <span className="text-xs text-emerald-400 font-mono">
-                            {formatTimestamp(item.timestamp)}
-                          </span>
-                        )}
-                      </div>
-                      {item.evidence && (
-                        <div className="mt-2 text-sm text-zinc-300 bg-zinc-900/50 rounded p-3 border border-zinc-700/30">
-                          <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Evidence</div>
-                          <p className="text-base text-white italic">"{item.evidence}"</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              ))}
+            <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/20 p-3">
+              <div className="space-y-1">
+                {analysis.checklist.map((item) => (
+                  <ChecklistItem
+                    key={item.id}
+                    item={item}
+                    onTimestampClick={onTimestampClick}
+                    isHighlighted={isInHighlightedSegment(item.timestamp)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 
@@ -499,47 +756,14 @@ export function AnalysisPane({ analysis, isLoading, onTimestampClick }: Analysis
                 <Lightbulb className="h-5 w-5 text-blue-400" />
                 <h2 className="text-lg font-semibold text-white">Sales Insights</h2>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {analysis.salesInsights.map((insight, index) => (
-                  <button
+                  <SalesInsightItem
                     key={index}
-                    onClick={() => {
-                      if (insight.timestamp !== null && insight.timestamp !== undefined && onTimestampClick) {
-                        onTimestampClick(insight.timestamp);
-                      }
-                    }}
-                    disabled={insight.timestamp === null && insight.timestamp === undefined}
-                    className={`w-full text-left rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 transition-all ${
-                      insight.timestamp !== null && insight.timestamp !== undefined
-                        ? 'hover:bg-blue-500/10 hover:border-blue-500/50 cursor-pointer'
-                        : 'cursor-default'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className={`px-2 py-1 rounded text-xs font-medium ${
-                        insight.severity === 'high' ? 'bg-red-500/20 text-red-400' :
-                        insight.severity === 'med' ? 'bg-yellow-500/20 text-yellow-400' :
-                        'bg-blue-500/20 text-blue-400'
-                      }`}>
-                        {insight.severity?.toUpperCase() || 'INFO'}
-                      </div>
-                      {insight.timestamp !== undefined && insight.timestamp !== null && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-blue-400" />
-                          <span className="text-xs text-blue-400 font-mono">
-                            {formatTimestamp(insight.timestamp)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-base text-blue-200 mb-3 font-medium">{insight.note}</div>
-                    {insight.snippet && (
-                      <div className="mt-3 bg-zinc-900/50 rounded p-3 border border-blue-500/20">
-                        <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Quote</div>
-                        <div className="text-sm italic text-zinc-300">"{insight.snippet}"</div>
-                      </div>
-                    )}
-                  </button>
+                    insight={insight}
+                    onTimestampClick={onTimestampClick}
+                    isHighlighted={isInHighlightedSegment(insight.timestamp)}
+                  />
                 ))}
               </div>
             </div>
@@ -555,41 +779,14 @@ export function AnalysisPane({ analysis, isLoading, onTimestampClick }: Analysis
                 <Target className="h-5 w-5 text-amber-400" />
                 <h2 className="text-lg font-semibold text-white">Missed Opportunities</h2>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {analysis.missedOpportunities.map((opportunity, index) => (
-                  <button
+                  <MissedOpportunityItem
                     key={index}
-                    onClick={() => {
-                      if (opportunity.timestamp !== null && opportunity.timestamp !== undefined && onTimestampClick) {
-                        onTimestampClick(opportunity.timestamp);
-                      }
-                    }}
-                    disabled={opportunity.timestamp === null && opportunity.timestamp === undefined}
-                    className={`w-full text-left rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 transition-all ${
-                      opportunity.timestamp !== null && opportunity.timestamp !== undefined
-                        ? 'hover:bg-amber-500/10 hover:border-amber-500/50 cursor-pointer'
-                        : 'cursor-default'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertCircle className="h-5 w-5 text-amber-400" />
-                      {opportunity.timestamp !== undefined && opportunity.timestamp !== null && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-amber-400" />
-                          <span className="text-xs text-amber-400 font-mono">
-                            {formatTimestamp(opportunity.timestamp)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-base font-semibold text-amber-200 mb-3">{opportunity.recommendation}</div>
-                    {opportunity.snippet && (
-                      <div className="mt-3 bg-zinc-900/50 rounded p-3 border border-amber-500/20">
-                        <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Quote</div>
-                        <div className="text-sm italic text-zinc-300">"{opportunity.snippet}"</div>
-                      </div>
-                    )}
-                  </button>
+                    opportunity={opportunity}
+                    onTimestampClick={onTimestampClick}
+                    isHighlighted={isInHighlightedSegment(opportunity.timestamp)}
+                  />
                 ))}
               </div>
             </div>

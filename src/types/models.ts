@@ -132,6 +132,8 @@ export interface ChecklistItem {
 export interface Analysis {
   /** AI-generated summary of the call (2-3 sentences) */
   summary: string;
+  /** Comprehensive general feedback synthesizing the complete analysis (3-5 paragraphs) */
+  generalFeedback: string;
   /** Scoring metrics */
   scores: {
     /** Overall compliance score (0-100) */

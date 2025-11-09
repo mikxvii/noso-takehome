@@ -94,6 +94,7 @@ export const checklistItemSchema = z.object({
 
 export const analysisSchema = z.object({
   summary: z.string(),
+  generalFeedback: z.string(),
   scores: z.object({
     complianceOverall: z.number().min(0).max(100),
     clarity: z.number().min(0).max(100),

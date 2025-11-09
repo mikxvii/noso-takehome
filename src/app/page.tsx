@@ -17,6 +17,7 @@ export default function Home() {
   const [currentCallId, setCurrentCallId] = useState<string | undefined>();
   const [showHistory, setShowHistory] = useState(false);
   const [selectedTimestamp, setSelectedTimestamp] = useState<number | null>(null);
+  const [selectedSegmentRange, setSelectedSegmentRange] = useState<{ start: number; end: number } | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioSeekTime, setAudioSeekTime] = useState<number | null>(null);
   const { call, uploadFile, progress } = useCall(currentCallId);
@@ -48,6 +49,17 @@ export default function Home() {
   const handleTimestampClick = (timestamp: number) => {
     setSelectedTimestamp(timestamp);
     setAudioSeekTime(timestamp);
+
+    // Find the segment that contains this timestamp
+    const segment = call?.transcript?.segments.find(
+      seg => seg.start <= timestamp && seg.end >= timestamp
+    );
+
+    if (segment) {
+      setSelectedSegmentRange({ start: segment.start, end: segment.end });
+    } else {
+      setSelectedSegmentRange(null);
+    }
   };
 
   const handleAudioTimeUpdate = (currentTime: number) => {
@@ -145,6 +157,7 @@ export default function Home() {
         <div className="w-2/5 border-r border-zinc-800/50">
           <TranscriptPane
             segments={call?.transcript?.segments || []}
+            analysis={call?.analysis || null}
             isLoading={call?.status === 'transcribing'}
             highlightTimestamp={selectedTimestamp}
             onSegmentClick={handleTimestampClick}
@@ -156,6 +169,7 @@ export default function Home() {
             analysis={call?.analysis || null}
             isLoading={call?.status === 'analyzing'}
             onTimestampClick={handleTimestampClick}
+            highlightSegmentRange={selectedSegmentRange}
           />
         </div>
       </div>

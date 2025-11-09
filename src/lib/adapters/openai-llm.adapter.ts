@@ -158,6 +158,7 @@ CRITICAL INSTRUCTIONS:
 JSON STRUCTURE (REQUIRED):
 {
   "summary": "<2-3 sentence AI-generated summary of the call covering: what the customer needed, what the tech did, and the outcome>",
+  "generalFeedback": "<3-5 paragraph comprehensive feedback synthesizing the overall call quality, key strengths across all stages, primary areas for improvement, business impact assessment, and actionable recommendations for the technician. This should provide holistic, strategic guidance based on the complete analysis.>",
   "scores": {
     "complianceOverall": <number 0-100>,
     "clarity": <number 0-100>,
@@ -170,7 +171,7 @@ JSON STRUCTURE (REQUIRED):
       "present": <boolean>,
       "quality": "<poor|ok|good|excellent>",
       "evidence": [{"quote": "<exact quote from transcript>", "timestamp": <seconds>}],
-      "notes": "<detailed explanation of quality assessment>"
+      "notes": "<structured feedback with: 'Strengths: [what was done well]. Weaknesses: [areas for improvement].' Be specific and actionable.>"
     },
     "diagnosis": { same structure },
     "solutionExplanation": { same structure },
@@ -213,6 +214,8 @@ STAGE DEFINITIONS & QUALITY CRITERIA:
    - Quality "ok": Basic greeting present but lacks professionalism
    - Quality "poor": Rushed, impersonal, or missing key elements
    - Evidence: Provide exact quotes showing greeting, introduction, confirmation
+   - Notes Format: "**Strengths:**\n- [First specific strength with details]\n- [Second specific strength with details]\n\n**Weaknesses:**\n- [First specific weakness with actionable improvement]\n- [Second specific weakness with actionable improvement]"
+   - Example: "**Strengths:**\n- Used a warm, friendly tone when greeting the customer\n- Clearly stated their full name and company affiliation\n\n**Weaknesses:**\n- Did not confirm the customer's address for verification\n- Introduction felt somewhat rushed without building initial rapport"
 
 2. DIAGNOSIS (varies):
    - Quality "excellent": Asks open-ended questions, listens actively, confirms understanding, identifies root cause
@@ -220,6 +223,7 @@ STAGE DEFINITIONS & QUALITY CRITERIA:
    - Quality "ok": Basic questions asked but lacks depth or misses details
    - Quality "poor": Jumps to conclusions, doesn't ask diagnostic questions
    - Evidence: Provide quotes of key diagnostic questions and customer responses
+   - Notes Format: "**Strengths:**\n- [Specific strength with details]\n- [Another specific strength]\n\n**Weaknesses:**\n- [Specific weakness with improvement]\n- [Another specific weakness]"
 
 3. SOLUTION EXPLANATION (varies):
    - Quality "excellent": Explains problem clearly, outlines solution step-by-step, checks for understanding, addresses concerns
@@ -227,6 +231,7 @@ STAGE DEFINITIONS & QUALITY CRITERIA:
    - Quality "ok": Provides solution but lacks clarity or customer confirmation
    - Quality "poor": Vague explanation, technical jargon not explained, no verification
    - Evidence: Provide quotes showing how problem and solution were explained
+   - Notes Format: "**Strengths:**\n- [Specific strength]\n- [Another strength]\n\n**Weaknesses:**\n- [Specific weakness]\n- [Another weakness]"
 
 4. UPSELL (if present):
    - Quality "excellent": Identifies customer needs, presents value proposition naturally, handles objections well
@@ -234,6 +239,7 @@ STAGE DEFINITIONS & QUALITY CRITERIA:
    - Quality "ok": Mentions additional services but weakly or awkwardly
    - Quality "poor": Pushy, irrelevant, or poorly timed upsell attempt
    - Evidence: Provide exact quotes of upsell attempts and customer responses
+   - Notes Format: "**Strengths:**\n- [Specific strength]\n- [Another strength]\n\n**Weaknesses:**\n- [Specific weakness]\n- [Another weakness]"
 
 5. MAINTENANCE PLAN (if present):
    - Quality "excellent": Explains benefits clearly, ties to customer's specific situation, offers options
@@ -241,6 +247,7 @@ STAGE DEFINITIONS & QUALITY CRITERIA:
    - Quality "ok": Brief mention without much explanation
    - Quality "poor": No mention or very poor explanation
    - Evidence: Provide quotes about maintenance plan discussion
+   - Notes Format: "**Strengths:**\n- [Specific strength]\n- [Another strength]\n\n**Weaknesses:**\n- [Specific weakness]\n- [Another weakness]"
 
 6. CLOSING (typically last 30-60 seconds):
    - Quality "excellent": Summarizes work, confirms satisfaction, asks for questions, provides next steps, thanks customer warmly
@@ -248,6 +255,7 @@ STAGE DEFINITIONS & QUALITY CRITERIA:
    - Quality "ok": Basic thank you but rushed or incomplete
    - Quality "poor": Abrupt ending, no thank you or verification
    - Evidence: Provide quotes from the closing sequence
+   - Notes Format: "**Strengths:**\n- [Specific strength]\n- [Another strength]\n\n**Weaknesses:**\n- [Specific weakness]\n- [Another weakness]"
 
 CHECKLIST REQUIREMENTS (provide evidence for each - use intuitive, readable labels starting with verbs):
 1. tech-introduced-self: "Introduced themselves by name"
@@ -280,11 +288,18 @@ MISSED OPPORTUNITIES GUIDELINES:
 - Note when customer expressed interest but tech didn't follow up
 - Provide specific, actionable recommendations for improvement
 
-SCORING GUIDELINES:
-- complianceOverall (0-100): Average of all stage qualities + checklist completion
-- clarity (0-100): How well tech communicated (clear language, organized, confirmed understanding)
-- empathy (0-100): Active listening, acknowledging concerns, patient responses
-- professionalism (0-100): Courteous tone, proper introduction/closing, respectful demeanor
+SCORING GUIDELINES (Be precise and granular - avoid round numbers like 70, 80, 90):
+- complianceOverall (0-100): Calculate as weighted average: (stage quality scores × 0.6) + (checklist pass rate × 0.4). Use specific scores like 73, 84, 91, etc.
+- clarity (0-100): Evaluate communication quality: clear language (30 pts), logical organization (30 pts), verified understanding (20 pts), avoided jargon (20 pts). Be granular: 67, 78, 85, etc.
+- empathy (0-100): Assess customer care: active listening (35 pts), acknowledged concerns (35 pts), patient responses (30 pts). Use specific scores: 71, 82, 88, etc.
+- professionalism (0-100): Evaluate demeanor: courteous tone (35 pts), proper intro/closing (35 pts), respectful throughout (30 pts). Be precise: 76, 83, 92, etc.
+
+IMPORTANT: Scores should reflect actual performance with granularity. Use the full 0-100 range appropriately:
+- 90-100: Exceptional, nearly flawless execution
+- 80-89: Strong performance with minor areas for improvement
+- 70-79: Satisfactory with notable gaps
+- 60-69: Below expectations with significant issues
+- Below 60: Poor performance requiring major improvement
 
 CRITICAL REMINDERS:
 - Every piece of evidence MUST include an exact quote and timestamp
@@ -311,20 +326,40 @@ ${segmentsText}
 
 ANALYSIS REQUIREMENTS:
 1. Read the ENTIRE transcript carefully before analyzing
-2. For each stage, provide AT LEAST 2-3 pieces of evidence with exact quotes and timestamps
-3. For sales insights, be COMPREHENSIVE - identify ALL moments where:
+2. For the generalFeedback field, provide 3-5 well-structured paragraphs covering:
+   - Paragraph 1: Overall call assessment - rate the call holistically and highlight what the tech did best
+   - Paragraph 2: Key strengths - synthesize the top 2-3 strengths demonstrated across all conversation stages
+   - Paragraph 3: Primary improvement areas - identify the 2-3 most critical weaknesses that need attention
+   - Paragraph 4: Business impact - explain how the call quality affects customer satisfaction, revenue potential, and brand reputation
+   - Paragraph 5: Actionable recommendations - provide 3-5 specific, concrete steps the tech should take to improve future calls
+
+   Use professional, constructive language. Be specific with examples from the call. Format as plain text paragraphs separated by double newlines.
+
+3. For each stage, provide AT LEAST 2-3 pieces of evidence with exact quotes and timestamps
+4. For each stage's notes field, use this EXACT format with markdown bold and newlines:
+   "**Strengths:**
+   - [First specific strength with detailed explanation]
+   - [Second specific strength with detailed explanation]
+
+   **Weaknesses:**
+   - [First specific weakness with actionable improvement suggestion]
+   - [Second specific weakness with actionable improvement suggestion]"
+
+   IMPORTANT: Be detailed and specific in each bullet point. Avoid generic statements.
+5. For sales insights, be COMPREHENSIVE - identify ALL moments where:
    - Value was positioned or could have been positioned
    - Customer showed buying signals, needs, concerns, or interests
    - Tech used effective sales techniques
    - Customer asked about pricing, scheduling, or additional services
    - Opportunities existed for upsells, maintenance plans, or recurring services
    Aim for 5-10+ sales insights per call - be thorough!
-4. For missed opportunities, be specific about what should have been said and when
-5. For the checklist, verify each item against the transcript and provide supporting evidence
-6. For call type, provide a descriptive label that includes the service category and specific reason (e.g., "HVAC Repair - No Cooling" not just "repair")
-7. Ensure all timestamps are accurate and correspond to actual moments in the transcript
-8. Make your notes detailed and actionable - avoid vague statements like "could be better"
-9. When quoting, use the exact words from the transcript, not paraphrases
+6. For missed opportunities, be specific about what should have been said and when
+7. For the checklist, verify each item against the transcript and provide supporting evidence
+8. For call type, provide a descriptive label that includes the service category and specific reason (e.g., "HVAC Repair - No Cooling" not just "repair")
+9. Ensure all timestamps are accurate and correspond to actual moments in the transcript
+10. When quoting, use the exact words from the transcript, not paraphrases
+
+IMPORTANT: The generalFeedback field is critical - it should synthesize insights from ALL other sections (scores, stages, checklist, insights, opportunities) into a cohesive, strategic assessment. Don't just repeat what's in individual sections; provide higher-level analysis and actionable coaching.
 
 Provide your comprehensive analysis in valid JSON format following the schema exactly.`;
   }
