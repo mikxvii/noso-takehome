@@ -8,7 +8,7 @@ import { TranscriptPane } from '@/components/TranscriptPane';
 import { AnalysisPane } from '@/components/AnalysisPane';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { useCall } from '@/hooks/useCall';
-import { storage, ensureInitialized } from '@/lib/firebase/config';
+import { getStorageAfterInit, ensureInitialized } from '@/lib/firebase/config';
 
 // Prevent static generation - this page requires client-side Firebase
 export const dynamic = 'force-dynamic';
@@ -76,19 +76,25 @@ export default function Home() {
           setAudioUrl(call.audioPath);
         } else {
           // It's a storage path, get download URL
-          if (!storage) {
-            console.error('Firebase Storage is not initialized');
+          const firebaseStorage = await getStorageAfterInit();
+          if (!firebaseStorage) {
+            console.error('[Audio URL] Firebase Storage is not initialized');
+            console.error('[Audio URL] Check that NEXT_PUBLIC_FIREBASE_* environment variables are set');
             setAudioUrl(null);
             return;
           }
           // Dynamic import to avoid build-time execution
           const { ref, getDownloadURL } = await import('firebase/storage');
-          const storageRef = ref(storage, call.audioPath);
+          const storageRef = ref(firebaseStorage, call.audioPath);
           const url = await getDownloadURL(storageRef);
+          console.log('[Audio URL] Successfully fetched download URL for:', call.audioPath);
           setAudioUrl(url);
         }
       } catch (error) {
-        console.error('Error fetching audio URL:', error);
+        console.error('[Audio URL] Error fetching audio URL:', error);
+        if (error instanceof Error) {
+          console.error('[Audio URL] Error details:', error.message);
+        }
         setAudioUrl(null);
       }
     };

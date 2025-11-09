@@ -37,7 +37,8 @@ function getFirebaseConfig() {
     .map(([key]) => key);
 
   if (missingVars.length > 0) {
-    console.warn(`Missing Firebase environment variables: ${missingVars.join(', ')}`);
+    console.error(`[Firebase Config] Missing required environment variables: ${missingVars.join(', ')}`);
+    console.error(`[Firebase Config] Please set these in your .env.local file or deployment environment`);
     return null;
   }
 
@@ -62,7 +63,8 @@ async function getFirebaseApp(): Promise<FirebaseApp | null> {
 
     const config = getFirebaseConfig();
     if (!config) {
-      console.error('Firebase configuration is missing. Cannot initialize Firebase.');
+      console.error('[Firebase Config] Firebase configuration is missing. Cannot initialize Firebase.');
+      console.error('[Firebase Config] Make sure all NEXT_PUBLIC_FIREBASE_* environment variables are set.');
       return null;
     }
 
@@ -170,4 +172,10 @@ export { ensureInitialized };
 export async function getDbAfterInit(): Promise<Firestore | null> {
   await ensureInitialized();
   return _db;
+}
+
+// Export a function to get the storage instance after initialization
+export async function getStorageAfterInit(): Promise<FirebaseStorage | null> {
+  await ensureInitialized();
+  return _storage;
 }
