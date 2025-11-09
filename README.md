@@ -4,164 +4,109 @@ AI-powered quality assurance platform for field service phone calls with automat
 
 ## Features
 
-- **Drag-and-Drop Upload**: Simple audio file upload (.mp3, .wav, .m4a)
+- **Audio Upload**: Drag-and-drop interface for `.mp3`, `.wav`, `.m4a` files
 - **Automatic Transcription**: Speaker diarization with tech/customer labeling
-- **Real-time Updates**: Live UI updates as calls progress through processing stages
-- **AI Analysis**: OpenAI-powered quality assessment including:
-  - Compliance scoring (clarity, empathy, professionalism)
-  - Stage-by-stage evaluation (introduction, diagnosis, solution, upsell, etc.)
-  - Requirements checklist validation
-  - Sales insights and missed opportunities
-- **Interactive Transcript**: Search, filter by speaker, with timestamp references
-- **Visual Analytics**: Pie charts for stage coverage and quality distribution
+- **AI Analysis**: Compliance scoring, stage evaluation, sales insights, and quality checklist
+- **Real-time Updates**: Live UI updates via Firestore subscriptions
+- **Interactive Transcript**: Search, filter by speaker, click-to-seek audio playback
 
-## Architecture
+## Tech Stack
 
-### Tech Stack
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes (serverless)
-- **Database**: Firebase Firestore (real-time)
+- **Backend**: Next.js API Routes
+- **Database**: Firebase Firestore
 - **Storage**: Firebase Cloud Storage
-- **AI**: OpenAI GPT-4o-mini
-- **Charts**: Recharts
-- **Validation**: Zod schemas
-
-### Design Patterns
-- **Clean Architecture**: Port/Adapter pattern for swappable providers
-- **Bottom-Up Build**: Data models → Ports → Adapters → API → UI
-- **State Machine**: Call status flow (created → transcribing → transcribed → analyzing → complete)
-- **Real-time Subscriptions**: Firestore onSnapshot for live UI updates
+- **AI**: OpenAI GPT-4o-mini (analysis), AssemblyAI (transcription)
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ and npm
-- Firebase project with Firestore and Storage enabled
+- Node.js 18+
+- Firebase project (Firestore + Storage)
 - OpenAI API key
+- AssemblyAI API key (optional, uses mock if not set)
 
 ### Installation
 
-1. Clone and install dependencies:
+1. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Set up environment variables:
-```bash
-cp .env.example .env.local
+2. Set up environment variables in `.env.local`:
+
+```env
+# Firebase Client
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+
+# Firebase Admin (use service account file or env var)
+# Option 1: Save as firebase-service-account.json in project root
+# Option 2: Format JSON and set as:
+FIREBASE_SERVICE_ACCOUNT_KEY={...}
+
+# AI Services
+OPENAI_API_KEY=sk-...
+ASSEMBLYAI_API_KEY=...  # Optional
 ```
 
-3. Configure `.env.local` with your credentials:
-   - Firebase client config (get from Firebase Console > Project Settings)
-   - Firebase Admin service account JSON (Project Settings > Service Accounts > Generate Private Key)
-   - OpenAI API key
-
-4. Run the development server:
+3. Run development server:
 ```bash
 npm run dev
 ```
 
-5. Open [http://localhost:3000](http://localhost:3000)
+4. Open [http://localhost:3000](http://localhost:3000)
 
-### Testing the Flow
+### Firebase Setup
 
-Since this uses a mock transcription adapter for development:
+1. Create Firestore composite index on `calls` collection:
+   - Fields: `userId` (Ascending), `createdAt` (Descending)
+   - Or use `firestore.indexes.json`
 
-1. Upload an audio file through the UI
-2. The file will be uploaded to Firebase Storage
-3. A Call document will be created in Firestore
-4. To simulate transcription completion, you'll need to manually trigger the webhook (see below)
-
-#### Simulating Transcription Webhook
-
-Create a script or use a tool like Postman to POST to `/api/webhooks/transcription`:
-
-```json
-{
-  "jobId": "YOUR_JOB_ID_FROM_FIRESTORE",
-  "status": "completed",
-  "transcript": {
-    "text": "Full transcript text...",
-    "segments": [
-      {
-        "start": 0,
-        "end": 5,
-        "speaker": "tech",
-        "text": "Hello, this is the technician..."
-      }
-    ],
-    "provider": "other",
-    "confidence": 0.95
-  }
-}
+2. Configure Storage CORS:
+```bash
+npm run setup-cors
 ```
-
-Or use the MockTranscriptionAdapter helper method to generate sample data.
 
 ## Project Structure
 
 ```
 src/
 ├── app/
-│   ├── api/
-│   │   ├── calls/route.ts              # Create call & upload
-│   │   ├── webhooks/
-│   │   │   └── transcription/route.ts  # Receive transcript
-│   │   └── analysis/
-│   │       └── run/route.ts            # Run AI analysis
-│   ├── layout.tsx
-│   └── page.tsx                        # Main 3-pane UI
-├── components/
-│   ├── UploadPane.tsx                  # File upload UI
-│   ├── TranscriptPane.tsx              # Transcript viewer
-│   └── AnalysisPane.tsx                # Analysis results
-├── hooks/
-│   └── useCall.ts                      # Real-time call state
+│   ├── api/                    # API routes
+│   │   ├── calls/             # Call management
+│   │   ├── analysis/           # AI analysis
+│   │   └── webhooks/          # Transcription webhooks
+│   └── page.tsx               # Main UI
+├── components/                 # React components
+├── hooks/                      # Custom hooks
 ├── lib/
-│   ├── adapters/                       # Concrete implementations
-│   │   ├── openai-llm.adapter.ts
-│   │   ├── mock-transcription.adapter.ts
-│   │   └── firebase-storage.adapter.ts
-│   ├── firebase/
-│   │   ├── config.ts                   # Client SDK
-│   │   └── admin.ts                    # Admin SDK
-│   ├── ports/                          # Interface definitions
-│   │   ├── llm-analysis.port.ts
-│   │   ├── transcription.port.ts
-│   │   └── storage.port.ts
-│   └── validators/
-│       └── schemas.ts                  # Zod validation
-└── types/
-    └── models.ts                       # TypeScript interfaces
+│   ├── adapters/              # Provider implementations
+│   ├── ports/                 # Interface definitions
+│   ├── firebase/              # Firebase config
+│   └── validators/            # Zod schemas
+└── types/                     # TypeScript types
 ```
 
-## Deployment
+## API Endpoints
 
-### Vercel
+- `POST /api/calls` - Create call and get upload URL
+- `GET /api/calls?userId=xxx` - Get call history
+- `POST /api/calls/[callId]/start-transcription` - Start transcription
+- `POST /api/analysis/run` - Run AI analysis
+- `POST /api/webhooks/transcription` - Receive transcription webhook
 
-1. Connect your GitHub repository to Vercel
-2. Add environment variables in Vercel dashboard
-3. Deploy!
+## Architecture
 
-### Environment Variables for Production
-Ensure all env vars from `.env.example` are set in Vercel:
-- Firebase config (NEXT_PUBLIC_*)
-- FIREBASE_SERVICE_ACCOUNT_KEY (paste full JSON as string)
-- OPENAI_API_KEY
+Uses port/adapter pattern for swappable providers:
+- **Ports** (`src/lib/ports/`): Interface definitions
+- **Adapters** (`src/lib/adapters/`): Provider implementations
 
-## Swapping Providers
-
-The port/adapter pattern makes it easy to swap services:
-
-### Replace Mock Transcription with AssemblyAI
-1. Create `src/lib/adapters/assemblyai.adapter.ts` implementing `TranscriptionPort`
-2. Update `/api/calls/route.ts` to use `AssemblyAIAdapter` instead of `MockTranscriptionAdapter`
-3. Add AssemblyAI API key to environment variables
-
-### Use Gemini Instead of OpenAI
-1. Create `src/lib/adapters/gemini-llm.adapter.ts` implementing `LLMAnalysisPort`
-2. Update `/api/analysis/run/route.ts` to use new adapter
-3. Ensure the adapter returns data matching the `analysisSchema` Zod schema
+Call status flow: `created → uploading → transcribing → transcribed → analyzing → complete`
 
 ## License
 
