@@ -14,7 +14,7 @@ export class OpenAILLMAdapter implements LLMAnalysisPort {
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey?: string, model: string = 'gpt-4o-mini') {
+  constructor(apiKey?: string, model: string = 'gpt-4o') {
     this.client = new OpenAI({
       apiKey: apiKey || process.env.OPENAI_API_KEY,
     });
@@ -34,7 +34,7 @@ export class OpenAILLMAdapter implements LLMAnalysisPort {
           { role: 'user', content: userPrompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.3, // Lower temperature for more consistent analysis
+        temperature: 0.2, // Very low temperature for consistent, accurate analysis
       });
 
       const rawContent = completion.choices[0]?.message?.content;
@@ -88,19 +88,76 @@ export class OpenAILLMAdapter implements LLMAnalysisPort {
 
   private async validateAnalysis(data: unknown): Promise<Analysis> {
     try {
-      return analysisSchema.parse(data);
+      // Preprocess: convert null timestamps to undefined for optional fields
+      const preprocessed = this.preprocessAnalysisData(data);
+      return analysisSchema.parse(preprocessed);
     } catch (error) {
       console.error('Schema validation failed:', error);
       throw new Error('LLM output does not match expected schema');
     }
   }
 
+  /**
+   * Preprocess analysis data to convert null values to undefined for optional fields
+   */
+  private preprocessAnalysisData(data: any): any {
+    if (!data || typeof data !== 'object') return data;
+
+    const processed = { ...data };
+
+    // Process checklist items
+    if (Array.isArray(processed.checklist)) {
+      processed.checklist = processed.checklist.map((item: any) => ({
+        ...item,
+        timestamp: item.timestamp === null ? undefined : item.timestamp,
+      }));
+    }
+
+    // Process sales insights
+    if (Array.isArray(processed.salesInsights)) {
+      processed.salesInsights = processed.salesInsights.map((insight: any) => ({
+        ...insight,
+        timestamp: insight.timestamp === null ? undefined : insight.timestamp,
+      }));
+    }
+
+    // Process missed opportunities
+    if (Array.isArray(processed.missedOpportunities)) {
+      processed.missedOpportunities = processed.missedOpportunities.map((opp: any) => ({
+        ...opp,
+        timestamp: opp.timestamp === null ? undefined : opp.timestamp,
+      }));
+    }
+
+    // Process stage evidence
+    if (processed.stages) {
+      Object.keys(processed.stages).forEach((stageKey) => {
+        const stage = processed.stages[stageKey];
+        if (stage?.evidence && Array.isArray(stage.evidence)) {
+          stage.evidence = stage.evidence.map((ev: any) => ({
+            ...ev,
+            timestamp: ev.timestamp === null ? undefined : ev.timestamp,
+          }));
+        }
+      });
+    }
+
+    return processed;
+  }
+
   private buildSystemPrompt(): string {
-    return `You are an expert QA analyst for field-service phone calls. Your role is to analyze service call transcripts and produce comprehensive quality assessments.
+    return `You are an expert QA analyst specializing in field-service call analysis. Your role is to provide comprehensive, accurate, and evidence-based assessments of service call quality.
 
-CRITICAL: You MUST respond with valid JSON matching this exact structure. Do not include any text outside the JSON object.
+CRITICAL INSTRUCTIONS:
+1. You MUST respond with valid JSON matching the exact structure below
+2. ALWAYS provide direct quotes from the transcript as evidence
+3. ALWAYS include accurate timestamps (in seconds) for all evidence
+4. Be thorough, consistent, and objective in your analysis
+5. Focus on specific, actionable insights rather than vague observations
 
+JSON STRUCTURE (REQUIRED):
 {
+  "summary": "<2-3 sentence AI-generated summary of the call covering: what the customer needed, what the tech did, and the outcome>",
   "scores": {
     "complianceOverall": <number 0-100>,
     "clarity": <number 0-100>,
@@ -112,8 +169,8 @@ CRITICAL: You MUST respond with valid JSON matching this exact structure. Do not
     "introduction": {
       "present": <boolean>,
       "quality": "<poor|ok|good|excellent>",
-      "evidence": [{"quote": "<text>", "timestamp": <seconds>}],
-      "notes": "<optional string>"
+      "evidence": [{"quote": "<exact quote from transcript>", "timestamp": <seconds>}],
+      "notes": "<detailed explanation of quality assessment>"
     },
     "diagnosis": { same structure },
     "solutionExplanation": { same structure },
@@ -123,17 +180,17 @@ CRITICAL: You MUST respond with valid JSON matching this exact structure. Do not
   },
   "salesInsights": [
     {
-      "snippet": "<text>",
+      "snippet": "<exact quote showing sales moment>",
       "timestamp": <seconds>,
-      "note": "<description>",
+      "note": "<specific insight about what was done well or could be improved>",
       "severity": "<low|med|high>"
     }
   ],
   "missedOpportunities": [
     {
-      "recommendation": "<text>",
-      "snippet": "<optional text>",
-      "timestamp": <optional seconds>
+      "recommendation": "<specific, actionable recommendation>",
+      "snippet": "<quote showing the missed opportunity context>",
+      "timestamp": <seconds>
     }
   ],
   "checklist": [
@@ -141,32 +198,94 @@ CRITICAL: You MUST respond with valid JSON matching this exact structure. Do not
       "id": "<unique-id>",
       "label": "<requirement description>",
       "passed": <boolean>,
-      "evidence": "<optional justification>",
-      "timestamp": <optional seconds>
+      "evidence": "<quote from transcript or explanation why it failed>",
+      "timestamp": <seconds or null>
     }
   ],
   "createdAt": <unix timestamp in milliseconds>
 }
 
-STAGE DEFINITIONS:
-- Introduction: Greeting, tech introduces self, confirms customer details
-- Diagnosis: Tech asks questions, identifies problem, explains findings
-- Solution Explanation: Tech explains repair/solution clearly, addresses concerns
-- Upsell: Tech suggests additional services or products (if applicable)
-- Maintenance Plan: Tech recommends preventive maintenance or follow-up
-- Closing: Summary, next steps, asks if customer has questions, thanks customer
+STAGE DEFINITIONS & QUALITY CRITERIA:
 
-CHECKLIST REQUIREMENTS:
-1. Tech introduced themselves by name
-2. Tech confirmed customer information
-3. Tech asked diagnostic questions
-4. Tech explained the problem clearly
-5. Tech provided a solution with clear next steps
-6. Tech asked if customer had any questions
-7. Tech was polite and professional throughout
-8. Tech spoke clearly without jargon (or explained technical terms)
+1. INTRODUCTION (0-30 seconds typically):
+   - Quality "excellent": Tech greets warmly, states name/company, confirms customer name/address
+   - Quality "good": Tech greets and introduces self, minor omissions
+   - Quality "ok": Basic greeting present but lacks professionalism
+   - Quality "poor": Rushed, impersonal, or missing key elements
+   - Evidence: Provide exact quotes showing greeting, introduction, confirmation
 
-Analyze carefully and provide evidence-based assessments.`;
+2. DIAGNOSIS (varies):
+   - Quality "excellent": Asks open-ended questions, listens actively, confirms understanding, identifies root cause
+   - Quality "good": Asks relevant questions, identifies issue with minor gaps
+   - Quality "ok": Basic questions asked but lacks depth or misses details
+   - Quality "poor": Jumps to conclusions, doesn't ask diagnostic questions
+   - Evidence: Provide quotes of key diagnostic questions and customer responses
+
+3. SOLUTION EXPLANATION (varies):
+   - Quality "excellent": Explains problem clearly, outlines solution step-by-step, checks for understanding, addresses concerns
+   - Quality "good": Clear explanation with minor gaps in detail or verification
+   - Quality "ok": Provides solution but lacks clarity or customer confirmation
+   - Quality "poor": Vague explanation, technical jargon not explained, no verification
+   - Evidence: Provide quotes showing how problem and solution were explained
+
+4. UPSELL (if present):
+   - Quality "excellent": Identifies customer needs, presents value proposition naturally, handles objections well
+   - Quality "good": Attempts upsell relevantly but could be more persuasive
+   - Quality "ok": Mentions additional services but weakly or awkwardly
+   - Quality "poor": Pushy, irrelevant, or poorly timed upsell attempt
+   - Evidence: Provide exact quotes of upsell attempts and customer responses
+
+5. MAINTENANCE PLAN (if present):
+   - Quality "excellent": Explains benefits clearly, ties to customer's specific situation, offers options
+   - Quality "good": Mentions plan with some benefits explained
+   - Quality "ok": Brief mention without much explanation
+   - Quality "poor": No mention or very poor explanation
+   - Evidence: Provide quotes about maintenance plan discussion
+
+6. CLOSING (typically last 30-60 seconds):
+   - Quality "excellent": Summarizes work, confirms satisfaction, asks for questions, provides next steps, thanks customer warmly
+   - Quality "good": Good closure with 1-2 elements missing
+   - Quality "ok": Basic thank you but rushed or incomplete
+   - Quality "poor": Abrupt ending, no thank you or verification
+   - Evidence: Provide quotes from the closing sequence
+
+CHECKLIST REQUIREMENTS (provide evidence for each):
+1. tech-introduced-self: Tech stated their name clearly
+2. tech-stated-company: Tech mentioned company name
+3. confirmed-customer-info: Tech confirmed customer name or address
+4. asked-diagnostic-questions: Tech asked about the problem/symptoms
+5. explained-problem-clearly: Tech explained what was wrong in understandable terms
+6. explained-solution: Tech described what they did or will do
+7. provided-next-steps: Tech explained what happens next
+8. asked-for-questions: Tech asked if customer had questions
+9. professional-tone: Tech maintained polite, professional demeanor
+10. clear-communication: Tech spoke clearly, avoided unexplained jargon
+
+SALES INSIGHTS GUIDELINES:
+- Identify moments where tech successfully positioned value
+- Note customer buying signals or expressed needs
+- Highlight effective sales techniques used
+- Mark severity based on impact: "high" = significant revenue opportunity, "med" = moderate, "low" = minor
+
+MISSED OPPORTUNITIES GUIDELINES:
+- Look for customer pain points that weren't addressed
+- Identify moments where additional services could have been suggested
+- Note when customer expressed interest but tech didn't follow up
+- Provide specific, actionable recommendations for improvement
+
+SCORING GUIDELINES:
+- complianceOverall (0-100): Average of all stage qualities + checklist completion
+- clarity (0-100): How well tech communicated (clear language, organized, confirmed understanding)
+- empathy (0-100): Active listening, acknowledging concerns, patient responses
+- professionalism (0-100): Courteous tone, proper introduction/closing, respectful demeanor
+
+CRITICAL REMINDERS:
+- Every piece of evidence MUST include an exact quote and timestamp
+- Be specific and detailed in your notes - avoid generic feedback
+- Base all assessments on actual transcript content, not assumptions
+- If a stage is not present, mark present: false and explain in notes
+- Provide at least 2-3 pieces of evidence per stage when present
+- Timestamps should reference the actual time in the transcript (in seconds)`;
   }
 
   private buildUserPrompt(input: AnalysisInput): string {
@@ -174,16 +293,26 @@ Analyze carefully and provide evidence-based assessments.`;
       .map(seg => `[${Math.floor(seg.start)}s] ${seg.speaker.toUpperCase()}: ${seg.text}`)
       .join('\n');
 
-    return `Analyze this service call transcript:
+    return `Analyze this service call transcript with maximum accuracy and detail.
 
 METADATA:
-- Duration: ${input.metadata?.durationSec ? `${Math.floor(input.metadata.durationSec / 60)} minutes` : 'unknown'}
+- Duration: ${input.metadata?.durationSec ? `${Math.floor(input.metadata.durationSec / 60)} minutes ${Math.floor(input.metadata.durationSec % 60)} seconds` : 'unknown'}
 - Suspected Call Type: ${input.metadata?.callType || 'unknown'}
 
-TRANSCRIPT (with speaker labels and timestamps):
+TRANSCRIPT (with speaker labels and timestamps in seconds):
 ${segmentsText}
 
-Provide a comprehensive analysis following the JSON schema exactly.`;
+ANALYSIS REQUIREMENTS:
+1. Read the ENTIRE transcript carefully before analyzing
+2. For each stage, provide AT LEAST 2-3 pieces of evidence with exact quotes and timestamps
+3. For sales insights, identify ALL moments where value was discussed or could have been added
+4. For missed opportunities, be specific about what should have been said and when
+5. For the checklist, verify each item against the transcript and provide supporting evidence
+6. Ensure all timestamps are accurate and correspond to actual moments in the transcript
+7. Make your notes detailed and actionable - avoid vague statements like "could be better"
+8. When quoting, use the exact words from the transcript, not paraphrases
+
+Provide your comprehensive analysis in valid JSON format following the schema exactly.`;
   }
 
   getModelInfo() {

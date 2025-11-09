@@ -103,12 +103,36 @@ export async function GET(request: NextRequest) {
   try {
     const userId = request.nextUrl.searchParams.get('userId') || 'anonymous-user';
 
-    const snapshot = await adminDb()
-      .collection('calls')
-      .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get();
+    let snapshot;
+
+    try {
+      // Try query with composite index (userId + createdAt)
+      snapshot = await adminDb()
+        .collection('calls')
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .limit(50)
+        .get();
+    } catch (indexError: any) {
+      // If index doesn't exist, fall back to simpler query and sort in memory
+      console.warn('Composite index not available, using fallback query:', indexError.message);
+
+      snapshot = await adminDb()
+        .collection('calls')
+        .where('userId', '==', userId)
+        .limit(50)
+        .get();
+
+      // Sort in memory (works for small datasets)
+      const calls = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+        .sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+
+      return NextResponse.json({ calls });
+    }
 
     const calls = snapshot.docs.map(doc => ({
       id: doc.id,

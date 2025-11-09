@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Upload } from 'lucide-react';
+import { Upload, History } from 'lucide-react';
 import { CallStatus } from '@/types/models';
 
 interface UploadPaneProps {
@@ -16,6 +16,8 @@ interface UploadPaneProps {
   status: CallStatus;
   progress: number;
   durationSec?: number;
+  onHistoryToggle?: () => void;
+  showingHistory?: boolean;
 }
 
 const statusLabels: Record<CallStatus, string> = {
@@ -38,7 +40,14 @@ const statusColors: Record<CallStatus, string> = {
   failed: 'text-red-500',
 };
 
-export function UploadPane({ onFileSelected, status, progress, durationSec }: UploadPaneProps) {
+export function UploadPane({
+  onFileSelected,
+  status,
+  progress,
+  durationSec,
+  onHistoryToggle,
+  showingHistory = false
+}: UploadPaneProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -84,7 +93,26 @@ export function UploadPane({ onFileSelected, status, progress, durationSec }: Up
 
   return (
     <div className="flex h-full flex-col bg-zinc-900 p-6">
-      <h2 className="mb-6 text-lg font-semibold text-white">Upload Audio</h2>
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-white">
+          {showingHistory ? 'Call History' : 'Upload Audio'}
+        </h2>
+        {onHistoryToggle && (
+          <button
+            onClick={onHistoryToggle}
+            className={`
+              rounded-lg p-2 transition-colors
+              ${showingHistory
+                ? 'bg-emerald-500/10 text-emerald-500'
+                : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+              }
+            `}
+            title={showingHistory ? 'Back to Upload' : 'View History'}
+          >
+            <History className="h-5 w-5" />
+          </button>
+        )}
+      </div>
 
       {/* Drag and Drop Zone */}
       <div

@@ -64,15 +64,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Add timestamp
-    analysis.createdAt = Date.now();
+      // Add timestamp
+      analysis.createdAt = Date.now();
 
-    // Update call with analysis
-    await adminDb().collection('calls').doc(callId).update({
-      analysis,
-      status: 'complete',
-      updatedAt: Date.now(),
-    });
+      // Clean analysis data: remove undefined values (Firestore doesn't accept undefined)
+      const cleanedAnalysis = removeUndefinedValues(analysis);
+
+      // Update call with analysis
+      await adminDb().collection('calls').doc(callId).update({
+        analysis: cleanedAnalysis,
+        status: 'complete',
+        updatedAt: Date.now(),
+      });
 
     console.log(`Analysis completed for call ${callId}`);
 
@@ -110,4 +113,30 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+}
+
+/**
+ * Recursively remove undefined values from an object (Firestore doesn't accept undefined)
+ */
+function removeUndefinedValues(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return null;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => removeUndefinedValues(item));
+  }
+
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = removeUndefinedValues(value);
+      }
+    }
+    return cleaned;
+  }
+
+  return obj;
 }

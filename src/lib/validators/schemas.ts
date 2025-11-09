@@ -61,7 +61,7 @@ export const transcriptSchema = z.object({
 
 export const evidenceSchema = z.object({
   quote: z.string(),
-  timestamp: z.number().optional(),
+  timestamp: z.number().nullable().optional(), // Allow null or undefined
 });
 
 export const stageEvaluationSchema = z.object({
@@ -73,7 +73,7 @@ export const stageEvaluationSchema = z.object({
 
 export const salesInsightSchema = z.object({
   snippet: z.string(),
-  timestamp: z.number().optional(),
+  timestamp: z.number().nullable().optional(), // Allow null or undefined
   note: z.string(),
   severity: insightSeveritySchema.optional(),
 });
@@ -81,7 +81,7 @@ export const salesInsightSchema = z.object({
 export const missedOpportunitySchema = z.object({
   recommendation: z.string(),
   snippet: z.string().optional(),
-  timestamp: z.number().optional(),
+  timestamp: z.number().nullable().optional(), // Allow null or undefined
 });
 
 export const checklistItemSchema = z.object({
@@ -89,10 +89,11 @@ export const checklistItemSchema = z.object({
   label: z.string(),
   passed: z.boolean(),
   evidence: z.string().optional(),
-  timestamp: z.number().optional(),
+  timestamp: z.number().nullable().optional(), // Allow null or undefined
 });
 
 export const analysisSchema = z.object({
+  summary: z.string(),
   scores: z.object({
     complianceOverall: z.number().min(0).max(100),
     clarity: z.number().min(0).max(100),

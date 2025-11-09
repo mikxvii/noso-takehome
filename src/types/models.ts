@@ -66,8 +66,8 @@ export interface Transcript {
 export interface Evidence {
   /** Quote from the transcript */
   quote: string;
-  /** Optional timestamp in seconds */
-  timestamp?: number;
+  /** Optional timestamp in seconds (can be null) */
+  timestamp?: number | null;
 }
 
 /**
@@ -90,8 +90,8 @@ export interface StageEvaluation {
 export interface SalesInsight {
   /** Text snippet from transcript */
   snippet: string;
-  /** Optional timestamp in seconds */
-  timestamp?: number;
+  /** Optional timestamp in seconds (can be null) */
+  timestamp?: number | null;
   /** Descriptive note about the insight */
   note: string;
   /** Optional severity level */
@@ -106,8 +106,8 @@ export interface MissedOpportunity {
   recommendation: string;
   /** Optional supporting snippet */
   snippet?: string;
-  /** Optional timestamp in seconds */
-  timestamp?: number;
+  /** Optional timestamp in seconds (can be null) */
+  timestamp?: number | null;
 }
 
 /**
@@ -122,14 +122,16 @@ export interface ChecklistItem {
   passed: boolean;
   /** Supporting evidence or explanation */
   evidence?: string;
-  /** Optional timestamp in seconds */
-  timestamp?: number;
+  /** Optional timestamp in seconds (can be null) */
+  timestamp?: number | null;
 }
 
 /**
  * Complete analysis results for a call
  */
 export interface Analysis {
+  /** AI-generated summary of the call (2-3 sentences) */
+  summary: string;
   /** Scoring metrics */
   scores: {
     /** Overall compliance score (0-100) */

@@ -6,6 +6,7 @@
  */
 
 import { AssemblyAI } from 'assemblyai';
+import OpenAI from 'openai';
 import {
   TranscriptionPort,
   StartTranscriptionInput,
@@ -100,7 +101,7 @@ export class AssemblyAITranscriptionAdapter implements TranscriptionPort {
           transcriptData = fullTranscript;
         }
 
-        const transcript = this.convertToTranscript(transcriptData);
+        const transcript = await this.convertToTranscript(transcriptData);
 
         console.log('[AssemblyAI] Converted transcript:', {
           segmentCount: transcript.segments.length,
@@ -139,7 +140,7 @@ export class AssemblyAITranscriptionAdapter implements TranscriptionPort {
       if (transcript.status === 'completed') {
         return {
           status: 'completed',
-          transcript: this.convertToTranscript(transcript),
+          transcript: await this.convertToTranscript(transcript),
         };
       } else if (transcript.status === 'error') {
         return {
@@ -159,32 +160,32 @@ export class AssemblyAITranscriptionAdapter implements TranscriptionPort {
   /**
    * Convert AssemblyAI transcript to our standard format
    */
-  private convertToTranscript(assemblyTranscript: any): Transcript {
-    const segments: TranscriptSegment[] = [];
+  private async convertToTranscript(assemblyTranscript: any): Promise<Transcript> {
+    const rawSegments: Array<{ speaker: string; start: number; end: number; text: string }> = [];
 
     // AssemblyAI provides utterances when speaker_labels is enabled
     if (assemblyTranscript.utterances && Array.isArray(assemblyTranscript.utterances)) {
       for (const utterance of assemblyTranscript.utterances) {
-        segments.push({
+        rawSegments.push({
+          speaker: utterance.speaker,
           start: utterance.start / 1000, // Convert ms to seconds
           end: utterance.end / 1000,
-          speaker: this.mapSpeakerLabel(utterance.speaker),
           text: utterance.text,
         });
       }
     } else if (assemblyTranscript.words && Array.isArray(assemblyTranscript.words)) {
       // Fallback: group words into segments if utterances aren't available
-      let currentSegment: TranscriptSegment | null = null;
+      let currentSegment: { speaker: string; start: number; end: number; text: string } | null = null;
 
       for (const word of assemblyTranscript.words) {
         if (!currentSegment || word.speaker !== currentSegment.speaker) {
           if (currentSegment) {
-            segments.push(currentSegment);
+            rawSegments.push(currentSegment);
           }
           currentSegment = {
+            speaker: word.speaker,
             start: word.start / 1000,
             end: word.end / 1000,
-            speaker: this.mapSpeakerLabel(word.speaker),
             text: word.text,
           };
         } else {
@@ -194,9 +195,20 @@ export class AssemblyAITranscriptionAdapter implements TranscriptionPort {
       }
 
       if (currentSegment) {
-        segments.push(currentSegment);
+        rawSegments.push(currentSegment);
       }
     }
+
+    // Identify which speaker is the tech using AI
+    const speakerMapping = await this.identifyTechSpeaker(rawSegments);
+
+    // Map segments with correct speaker labels
+    const segments: TranscriptSegment[] = rawSegments.map(seg => ({
+      start: seg.start,
+      end: seg.end,
+      speaker: speakerMapping[seg.speaker] || 'unknown',
+      text: seg.text,
+    }));
 
     return {
       text: assemblyTranscript.text || '',
@@ -204,6 +216,124 @@ export class AssemblyAITranscriptionAdapter implements TranscriptionPort {
       provider: 'assemblyai',
       confidence: assemblyTranscript.confidence,
     };
+  }
+
+  /**
+   * Use AI to identify which speaker is the tech based on content analysis
+   */
+  private async identifyTechSpeaker(segments: Array<{ speaker: string; text: string }>): Promise<Record<string, SpeakerLabel>> {
+    // Group segments by speaker
+    const speakerGroups: Record<string, string[]> = {};
+    for (const seg of segments) {
+      if (!speakerGroups[seg.speaker]) {
+        speakerGroups[seg.speaker] = [];
+      }
+      speakerGroups[seg.speaker].push(seg.text);
+    }
+
+    // Get unique speakers
+    const speakers = Object.keys(speakerGroups);
+    if (speakers.length === 0) {
+      return {};
+    }
+
+    // If only one speaker, mark as unknown
+    if (speakers.length === 1) {
+      return { [speakers[0]]: 'unknown' };
+    }
+
+    // Use OpenAI to identify which speaker is the tech
+    // Take first 5 segments from each speaker to analyze
+    try {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY not set');
+      }
+      
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+
+      // Build sample text from each speaker (first few segments)
+      const speakerSamples: Record<string, string> = {};
+      for (const speaker of speakers) {
+        const samples = speakerGroups[speaker].slice(0, 5).join(' ');
+        speakerSamples[speaker] = samples.substring(0, 500); // Limit to 500 chars per speaker
+      }
+
+      const prompt = `You are analyzing a phone call transcript between a field service technician and a customer.
+
+Here are sample quotes from each speaker:
+
+${speakers.map((sp, idx) => `Speaker ${sp}:
+"${speakerSamples[sp]}"`).join('\n\n')}
+
+Based on the content, identify which speaker is the FIELD SERVICE TECHNICIAN (tech) vs the CUSTOMER.
+
+The technician typically:
+- Introduces themselves with their name and company
+- Asks diagnostic questions about problems
+- Explains technical solutions
+- Uses professional service language
+- Mentions scheduling, repairs, or service work
+
+The customer typically:
+- Describes problems they're experiencing
+- Asks questions about their situation
+- Responds to the technician's questions
+- May express concerns or satisfaction
+
+Respond with ONLY a JSON object in this exact format:
+{
+  "techSpeaker": "<speaker letter, e.g., 'A' or 'B'>",
+  "reasoning": "<brief explanation>"
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert at identifying speakers in service call transcripts. Respond only with valid JSON.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      });
+
+      const response = JSON.parse(completion.choices[0].message.content || '{}');
+      const techSpeaker = response.techSpeaker?.toUpperCase();
+
+      console.log('[AssemblyAI] Speaker identification:', {
+        techSpeaker,
+        reasoning: response.reasoning,
+        allSpeakers: speakers,
+      });
+
+      // Build mapping
+      const mapping: Record<string, SpeakerLabel> = {};
+      for (const speaker of speakers) {
+        if (speaker.toUpperCase() === techSpeaker) {
+          mapping[speaker] = 'tech';
+        } else {
+          mapping[speaker] = 'customer';
+        }
+      }
+
+      return mapping;
+    } catch (error) {
+      console.error('[AssemblyAI] Failed to identify tech speaker, using fallback:', error);
+      // Fallback: use first speaker as tech
+      const mapping: Record<string, SpeakerLabel> = {};
+      mapping[speakers[0]] = 'tech';
+      for (let i = 1; i < speakers.length; i++) {
+        mapping[speakers[i]] = 'customer';
+      }
+      return mapping;
+    }
   }
 
   /**
