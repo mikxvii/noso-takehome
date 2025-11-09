@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "setup-cors": "tsx scripts/setup-cors.ts"
+    "setup-cors": "tsx scripts/setup-cors.ts",
+    "format-service-account": "node scripts/format-service-account.js"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
