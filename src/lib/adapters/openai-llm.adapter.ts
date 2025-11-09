@@ -326,14 +326,15 @@ ${segmentsText}
 
 ANALYSIS REQUIREMENTS:
 1. Read the ENTIRE transcript carefully before analyzing
-2. For the generalFeedback field, provide 3-5 well-structured paragraphs covering:
-   - Paragraph 1: Overall call assessment - rate the call holistically and highlight what the tech did best
-   - Paragraph 2: Key strengths - synthesize the top 2-3 strengths demonstrated across all conversation stages
-   - Paragraph 3: Primary improvement areas - identify the 2-3 most critical weaknesses that need attention
-   - Paragraph 4: Business impact - explain how the call quality affects customer satisfaction, revenue potential, and brand reputation
-   - Paragraph 5: Actionable recommendations - provide 3-5 specific, concrete steps the tech should take to improve future calls
+2. For the generalFeedback field, provide CONCISE, easy-to-read feedback formatted as bullet points. Keep it brief and focused - avoid unnecessary details or verbose explanations. Structure it as follows:
+   - Start with a brief overall call assessment (1-2 sentences) rating the call holistically and highlighting what the tech did best
+   - Then use SHORT, focused bullet points to cover:
+     • Key strengths - list the top 2-3 strengths in 1 sentence each
+     • Primary improvement areas - identify the 2-3 most critical weaknesses in 1 sentence each
+     • Business impact - one brief sentence on how call quality affects customer satisfaction and revenue
+     • Actionable recommendations - provide 3-5 specific steps in 1 sentence each
 
-   Use professional, constructive language. Be specific with examples from the call. Format as plain text paragraphs separated by double newlines.
+   CRITICAL: Be CONCISE. Each bullet point should be 1 sentence maximum. Skip unnecessary context, examples, or explanations. Focus on the essential information only. Use professional, constructive language but keep it brief and scannable.
 
 3. For each stage, provide AT LEAST 2-3 pieces of evidence with exact quotes and timestamps
 4. For each stage's notes field, use this EXACT format with markdown bold and newlines:
@@ -359,7 +360,7 @@ ANALYSIS REQUIREMENTS:
 9. Ensure all timestamps are accurate and correspond to actual moments in the transcript
 10. When quoting, use the exact words from the transcript, not paraphrases
 
-IMPORTANT: The generalFeedback field is critical - it should synthesize insights from ALL other sections (scores, stages, checklist, insights, opportunities) into a cohesive, strategic assessment. Don't just repeat what's in individual sections; provide higher-level analysis and actionable coaching.
+IMPORTANT: The generalFeedback field should be CONCISE and easy to scan. Synthesize insights from other sections but keep it brief - no more than 8-10 bullet points total. Focus on the most important takeaways only. Avoid repeating details that are already covered in individual sections.
 
 Provide your comprehensive analysis in valid JSON format following the schema exactly.`;
   }

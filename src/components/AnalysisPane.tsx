@@ -648,12 +648,25 @@ export function AnalysisPane({ analysis, isLoading, onTimestampClick, highlightS
               <MessageSquare className="h-4 w-4 text-purple-400" />
               <h3 className="text-sm font-semibold text-white uppercase tracking-wide">General Feedback</h3>
             </div>
-            <div className="rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 p-4 space-y-3">
-              {analysis.generalFeedback.split('\n\n').map((paragraph: string, idx: number) => (
-                <p key={idx} className="text-sm text-zinc-200 leading-relaxed">
-                  {paragraph.trim()}
-                </p>
-              ))}
+            <div className="rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 p-4">
+              <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-line">
+                {analysis.generalFeedback.split('\n').map((line, idx) => {
+                  // Check if line starts with bullet point markers
+                  if (line.trim().match(/^[•\-\*]\s/)) {
+                    return (
+                      <div key={idx} className="ml-4 mb-1">
+                        {line}
+                      </div>
+                    );
+                  }
+                  // Regular paragraph text
+                  return (
+                    <div key={idx} className={idx > 0 ? 'mt-2' : ''}>
+                      {line}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

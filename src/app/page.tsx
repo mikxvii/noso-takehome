@@ -157,7 +157,6 @@ export default function Home() {
         <div className="w-2/5 border-r border-zinc-800/50">
           <TranscriptPane
             segments={call?.transcript?.segments || []}
-            analysis={call?.analysis || null}
             isLoading={call?.status === 'transcribing'}
             highlightTimestamp={selectedTimestamp}
             onSegmentClick={handleTimestampClick}

@@ -9,12 +9,11 @@
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Loader2, FileText, Mic, Hash } from 'lucide-react';
-import { TranscriptSegment, SpeakerLabel, Analysis } from '@/types/models';
+import { Search, Loader2, FileText, Mic } from 'lucide-react';
+import { TranscriptSegment, SpeakerLabel } from '@/types/models';
 
 interface TranscriptPaneProps {
   segments: TranscriptSegment[];
-  analysis: Analysis | null;
   isLoading?: boolean;
   highlightTimestamp?: number | null;
   onSegmentClick?: (timestamp: number) => void;
@@ -32,51 +31,11 @@ const speakerLabels: Record<SpeakerLabel, string> = {
   unknown: 'Unknown',
 };
 
-export function TranscriptPane({ segments, analysis, isLoading, highlightTimestamp, onSegmentClick }: TranscriptPaneProps) {
+export function TranscriptPane({ segments, isLoading, highlightTimestamp, onSegmentClick }: TranscriptPaneProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [speakerFilter, setSpeakerFilter] = useState<SpeakerLabel | 'all'>('all');
   const segmentRefs = useRef<(HTMLElement | null)[]>([]);
 
-  // Count how many analysis annotations reference each segment
-  const getAnnotationCount = (segment: TranscriptSegment): number => {
-    if (!analysis) return 0;
-
-    let count = 0;
-    const segmentStart = segment.start;
-    const segmentEnd = segment.end;
-
-    // Helper to check if timestamp falls within segment
-    const isInSegment = (timestamp: number | null | undefined): boolean => {
-      if (timestamp === null || timestamp === undefined) return false;
-      return timestamp >= segmentStart && timestamp <= segmentEnd;
-    };
-
-    // Check stage evidence
-    Object.values(analysis.stages).forEach(stage => {
-      if (stage.evidence) {
-        stage.evidence.forEach(ev => {
-          if (isInSegment(ev.timestamp)) count++;
-        });
-      }
-    });
-
-    // Check sales insights
-    analysis.salesInsights.forEach(insight => {
-      if (isInSegment(insight.timestamp)) count++;
-    });
-
-    // Check missed opportunities
-    analysis.missedOpportunities.forEach(opp => {
-      if (isInSegment(opp.timestamp)) count++;
-    });
-
-    // Check checklist items
-    analysis.checklist.forEach(item => {
-      if (isInSegment(item.timestamp)) count++;
-    });
-
-    return count;
-  };
 
   // Filter and search segments
   const filteredSegments = useMemo(() => {
@@ -254,8 +213,6 @@ export function TranscriptPane({ segments, analysis, isLoading, highlightTimesta
                 segment.start <= highlightTimestamp &&
                 segment.end >= highlightTimestamp;
 
-              const annotationCount = getAnnotationCount(segment);
-
               return (
                 <button
                   key={index}
@@ -281,17 +238,9 @@ export function TranscriptPane({ segments, analysis, isLoading, highlightTimesta
                     <span className="text-xs font-medium text-emerald-400">
                       {speakerLabels[segment.speaker]}
                     </span>
-                    <div className="flex items-center gap-2">
-                      {annotationCount > 0 && (
-                        <div className="flex items-center gap-1 bg-purple-500/20 border border-purple-500/30 rounded-full px-2 py-0.5">
-                          <Hash className="h-3 w-3 text-purple-400" />
-                          <span className="text-xs font-medium text-purple-400">{annotationCount}</span>
-                        </div>
-                      )}
-                      <span className="text-xs text-zinc-500">
-                        {formatTimestamp(segment.start)}
-                      </span>
-                    </div>
+                    <span className="text-xs text-zinc-500">
+                      {formatTimestamp(segment.start)}
+                    </span>
                   </div>
                   <p className="text-sm leading-relaxed text-zinc-200">
                     {highlightText(segment.text, searchQuery)}
